@@ -1,0 +1,208 @@
+plugins {
+    id 'java-library'
+    id("io.github.surpsg.code-lines") version "0.0.1"
+}
+
+codeLinesStat {
+    sourceFilters.skipBlankLines = true
+    fileExtensions = ['java']
+}
+
+group 'app.krista.extensions.essentials.collaboration'
+
+/*
+ * Use extension.name for archiveBaseName, extension.version for version.
+ * Resulting jar: <extension.name>-<extension.version>.jar e.g. TeamsAPIs-2.0.0-rc1.jar
+ */
+def computedBaseName = "teams-apis-extension"
+def computedVersion = "local"
+
+tasks.register("setReleaseProperties") {
+    dependsOn("generateReleaseProperties")
+    doFirst {
+        def releasePropsFile = file("release.properties")
+        if (releasePropsFile.exists()) {
+            def props = new Properties()
+            releasePropsFile.withInputStream { stream -> props.load(stream) }
+            computedBaseName = (props['extension.name'] ?: computedBaseName).replaceAll(/\s+/, "")
+            computedVersion = props['extension.version'] ?: computedVersion
+
+            project.ext.set("finalBaseName", computedBaseName)
+            project.version = computedVersion
+
+            println "✔ Loaded extension name = ${computedBaseName}, version = ${computedVersion}"
+        } else {
+            logger.warn("⚠ release.properties not found; using default values.")
+            project.ext.set("finalBaseName", computedBaseName)
+            project.version = computedVersion
+        }
+    }
+}
+
+sourceCompatibility = '21'
+targetCompatibility = '21'
+
+repositories {
+    mavenLocal()
+    maven {
+        url "https://packages.cicd.in.antbrains.com/artifactory/libs-release"
+    }
+    mavenCentral()
+}
+
+configurations {
+    implementation {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    annotationProcessor 'app.krista:extension-impl-anno-processors:1.0.115'
+    implementation 'app.krista:krista-apis:1.0.115'
+    implementation 'org.glassfish.hk2:hk2-api:3.0.3'
+    implementation 'org.glassfish.jersey.media:jersey-media-multipart:2.35'
+    implementation 'com.microsoft.graph:microsoft-graph:5.58.0'
+    implementation 'com.microsoft.graph:microsoft-graph-auth:0.3.0'
+    implementation 'com.azure:azure-identity:1.8.1'
+    implementation 'com.github.scribejava:scribejava-apis:8.3.3'
+
+    testImplementation 'com.kristasoft.common:common-test:1.0.39'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.0'
+    testImplementation 'org.mockito:mockito-core:5.3.1'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.3.1'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.register('createSourceDir', Exec) {
+    dependsOn processResources
+    commandLine "mkdir", "-p", "$projectDir/build/classes/java/main/META-INF/project"
+}
+
+tasks.register('copyGradleFile', Exec) {
+    dependsOn createSourceDir
+    commandLine "cp", "$projectDir/build.gradle", "$projectDir/build/classes/java/main/META-INF/project/build.gradle"
+}
+
+tasks.register('includeSources', Exec) {
+    dependsOn copyGradleFile
+    commandLine "cp", "-r", "$projectDir/src", "$projectDir/build/classes/java/main/META-INF/project/src"
+}
+import java.util.regex.Pattern
+
+/*
+    Task to generate release.properties files in below format.
+    extension.version=<version>
+    extension.name=<name>
+    domain.name=<domain>
+    ecosystem.name=<ecosystem>
+    Every extension developer should update extensionFile and areaFileName with relative path.
+ */
+
+abstract class GenerateReleasePropertiesTask extends DefaultTask {
+    @TaskAction
+    def generateProperties() {
+        def extensionFilePath = 'src/main/java/app/krista/extensions/essentials/collaboration/teams/TeamsApisExtension.java'
+        def areaFilePath = 'src/main/java/app/krista/extensions/essentials/collaboration/teams/catalog/TeamsAPIsArea.java'
+        def extensionFile = project.file(extensionFilePath)
+        def areaFile = project.file(areaFilePath)
+        if (!extensionFile.exists()) {
+            throw new GradleException("Extension file not found: ${extensionFilePath}")
+        }
+        if (!areaFile.exists()) {
+            throw new GradleException("Area file not found: ${areaFilePath}")
+        }
+        def properties = new Properties()
+        // Pre-compile the regex pattern for better performance
+        def keyValuePattern = Pattern.compile(/(\w+)\s*=\s*"([^"]+)"/)
+        // Extract Extension annotation information
+        extractAnnotationInfo(extensionFile, "@Extension", keyValuePattern) { key, value ->
+            if (key == "name") {
+                properties.setProperty("extension.name", value)
+                logger.lifecycle("Found extension name: ${value}")
+            } else if (key == "version") {
+                properties.setProperty("extension.version", value)
+                logger.lifecycle("Found extension version: ${value}")
+            }
+        }
+        // Extract Domain annotation information
+        extractAnnotationInfo(areaFile, "@Domain", keyValuePattern) { key, value ->
+            if (key == "name") {
+                properties.setProperty("domain.name", value)
+                logger.lifecycle("Found domain name: ${value}")
+            } else if (key == "ecosystemName") {
+                properties.setProperty("ecosystem.name", value)
+                logger.lifecycle("Found ecosystem name: ${value}")
+            }
+        }
+        if (!properties.getProperty('extension.version')) {
+            throw new GradleException("Could not find extension version in ${extensionFilePath}")
+        }
+        if (!properties.getProperty('domain.name') || !properties.getProperty('ecosystem.name')) {
+            throw new GradleException("Could not find domain name or ecosystem name in ${areaFilePath}")
+        }
+        def releasePropertiesFile = project.file('release.properties')
+        def content = properties.collect { key, value -> "${key}=${value}" }.join('\n')
+        releasePropertiesFile.text = content + '\n'
+        logger.lifecycle("Generated release.properties with content:\n${content}")
+    }
+    /**
+     * Extracts annotation information from a file
+     * @param file The file to extract from
+     * @param annotationName The annotation name to look for
+     * @param keyValuePattern The regex pattern to extract key-value pairs
+     * @param processProperty Closure to process each property
+     */
+    private static void extractAnnotationInfo(File file, String annotationName, Pattern keyValuePattern, Closure processProperty) {
+        StringBuilder annotationText = new StringBuilder()
+        boolean inAnnotation = false
+        file.eachLine { line ->
+            line = line.trim()
+            if (line.contains(annotationName)) {
+                inAnnotation = true
+            }
+            if (inAnnotation) {
+                annotationText.append(line)
+                if (line.contains(")")) {
+                    inAnnotation = false
+                    def matcher = keyValuePattern.matcher(annotationText.toString())
+                    while (matcher.find()) {
+                        def key = matcher.group(1)
+                        def value = matcher.group(2)
+                        processProperty.call(key, value)
+                    }
+                }
+            }
+        }
+    }
+}
+
+tasks.register('generateReleaseProperties', GenerateReleasePropertiesTask) {
+    group = 'build'
+    description = 'Generates release.properties file with extension version and domain information'
+}
+tasks.named("jar") {
+    dependsOn tasks.named("generateReleaseProperties")
+}
+
+jar {
+    // This task ensures that release.properties is read *after* it has been generated.
+    // Gradle's configuration phase runs before tasks like `generateReleaseProperties` execute,
+    // so directly reading the release.properties file earlier results in missing or default values.
+    dependsOn tasks.named("setReleaseProperties")
+    archiveBaseName = project.ext.has("finalBaseName") ? project.ext.finalBaseName : "teams-apis-extension"
+
+    manifest {}
+    from {
+        configurations.implementation.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+    duplicatesStrategy = "exclude"
+}

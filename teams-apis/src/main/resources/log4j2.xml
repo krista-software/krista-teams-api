@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="ERROR">
+
+    <Appenders>
+        <Console name="console">
+            <PatternLayout pattern="%d{dd.MM.yyyy HH:mm:ss} *%-5p* %c{1}: %m (%F, line %L)%n"/>
+        </Console>
+
+        <!-- ERROR.log -->
+        <File name="ERROR" fileName="logs/teams-apis.log">
+            <PatternLayout pattern="%d{dd.MM.yyyy HH:mm:ss} *%-5p* %c{1}: %m (%F, line %L)%n"/>
+        </File>
+    </Appenders>
+
+    <Loggers>
+        <!-- Teams APIs Error Handling Classes - Set to DEBUG to see all our logging -->
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.validators" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.errorhandlers" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.impl.util" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.TeamsAPIsArea" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.TeamsAPIsAreaSubCatalogRequests" level="DEBUG"/>
+
+        <!-- Specific classes for detailed logging -->
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.validators.ChannelIdValidator" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.validators.TeamIdValidator" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.validators.ValidationOrchestrator" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.errorhandlers.ErrorHandlingStateManager" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.catalog.errorhandlers.ExtensionResponseGenerator" level="DEBUG"/>
+        <Logger name="app.krista.extensions.essentials.collaboration.teams.impl.util.GetChannelIDHelper" level="DEBUG"/>
+
+        <!-- Third-party library loggers - Keep at ERROR to reduce noise -->
+        <Logger name="org.apache.commons" level="ERROR"/>
+        <Logger name="org.apache.fop" level="ERROR"/>
+        <Logger name="org.docx4j" level="ERROR"/>
+        <Logger name="org.docx4j.Docx4J" level="ERROR"/>
+        <Logger name="org.docx4j.TraversalUtil" level="ERROR"/>
+        <Logger name="org.docx4j.XmlUtils" level="ERROR"/>
+        <Logger name="org.docx4j.utils.ResourceUtils" level="ERROR"/>
+        <Logger name="org.docx4j.convert.in" level="ERROR"/>
+        <Logger name="com.openhtmltopdf.load" level="ERROR"/>
+        <Logger name="org.docx4j.convert.in.xhtml" level="ERROR"/>
+        <Logger name="org.docx4j.convert.in.xhtml.ListHelper" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out.common.AbstractConversionContext" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out.common.Preprocess" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out.common.preprocess" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out.common.preprocess.FieldsCombiner" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out.common.writer.AbstractMessageWriter" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out.fo" level="ERROR"/>
+        <Logger name="org.docx4j.convert.out.html.ListsToContentControls" level="ERROR"/>
+        <Logger name="org.docx4j.diff" level="ERROR"/>
+        <Logger name="com.topologi" level="ERROR"/>
+        <Logger name="org.docx4j.fonts" level="ERROR"/>
+        <Logger name="org.docx4j.fonts.PhysicalFonts" level="ERROR"/>
+        <Logger name="org.docx4j.fonts.RunFontSelector" level="ERROR"/>
+        <Logger name="org.docx4j.jaxb" level="ERROR"/>
+        <Logger name="org.docx4j.model" level="ERROR"/>
+        <Logger name="org.docx4j.model.fields" level="ERROR"/>
+        <Logger name="org.docx4j.model.listnumbering" level="ERROR"/>
+        <Logger name="org.docx4j.model.PropertyResolver" level="ERROR"/>
+        <Logger name="org.docx4j.model.structure" level="ERROR"/>
+        <Logger name="org.docx4j.model.styles" level="ERROR"/>
+        <Logger name="org.docx4j.model.table" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.io3" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.packages" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts.Parts" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts.ThemePart" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts.WordprocessingML.BinaryPartAbstractImage" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts.WordprocessingML.ObfuscatedFontPart" level="ERROR"/>
+        <Logger name="org.docx4j.services.client" level="ERROR"/>
+        <Logger name="org.docx4j.toc" level="ERROR"/>
+        <Logger name="org.docx4j.wml" level="ERROR"/>
+        <Logger name="org.docx4j.utils.XPathFactoryUtil" level="ERROR"/>
+        <Logger name="org.docx4j.org.xhtmlrenderer" level="ERROR"/>
+        <Logger name="org.pptx4j" level="ERROR"/>
+        <Logger name="org.docx4j.model.datastorage" level="ERROR"/>
+        <Logger name="org.docx4j.model.datastorage.OpenDoPEHandlerComponents" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts.CustomXmlDataStoragePart" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts.XmlPart" level="ERROR"/>
+        <Logger name="org.opendope.conditions.Xpathref" level="ERROR"/>
+        <Logger name="org.opendope" level="ERROR"/>
+        <Logger name="com.plutext.merge" level="ERROR"/>
+        <Logger name="com.plutext.merge.CustomXmlPartHandler" level="ERROR"/>
+        <Logger name="com.plutext.merge.altchunk" level="ERROR"/>
+        <Logger name="com.plutext.merge.pptx" level="ERROR"/>
+        <Logger name="com.plutext.cmis" level="ERROR"/>
+        <Logger name="org.apache.jcp.xml.dsig.internal.dom" level="ERROR"/>
+        <Logger name="com.plutext.crypt.dsig" level="ERROR"/>
+        <Logger name="org.docx4j.openpackaging.parts.digitalsignature.XmlSignaturePart" level="ERROR"/>
+        <Logger name="com.plutext.demo.diagnostics" level="ERROR"/>
+
+        <!-- Root logger - Set to INFO to see our custom logging -->
+        <Root level="INFO">
+            <AppenderRef ref="console"/>
+            <AppenderRef ref="ERROR"/>
+        </Root>
+    </Loggers>
+
+</Configuration>
