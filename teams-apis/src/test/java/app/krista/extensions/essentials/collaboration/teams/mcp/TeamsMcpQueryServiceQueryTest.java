@@ -93,7 +93,7 @@ class TeamsMcpQueryServiceQueryTest {
 
     @Test
     void failsWhenProviderIsSetButItsKeyIsMissingAndNoLegacyKeyExists() {
-        tokens.put("mcp#aiProvider#inv-1", "openai");
+        tokens.put("REDACTED_SECRET", "openai");
         ExtensionResponse resp = service.query("show my messages");
         assertEquals(ExtensionResponse.Result.FAILURE, resp.getResult());
         assertTrue(resp.getError().getErrorMessage().contains("AI API key is not configured"));
@@ -101,7 +101,7 @@ class TeamsMcpQueryServiceQueryTest {
 
     @Test
     void fallsBackToLegacyClaudeKeyAndDefaultsProviderToAnthropic() {
-        tokens.put("mcp#claudeApiKey#inv-1", "legacy-key");
+        tokens.put("REDACTED_SECRET", "legacy-key");
         try (MockedStatic<AnthropicApiClient> anthropic = mockStatic(AnthropicApiClient.class)) {
             anthropic.when(() -> AnthropicApiClient.call(eq("legacy-key"), any(), any(), eq(0))).thenReturn("");
             ExtensionResponse resp = service.query("show my messages");
@@ -113,8 +113,8 @@ class TeamsMcpQueryServiceQueryTest {
     @Test
     void failsWhenNotAuthenticated() {
         when(attributeStore.load("inv-1")).thenReturn(unauthenticatedPublicAttrs());
-        tokens.put("mcp#aiProvider#inv-1", "openai");
-        tokens.put("mcp#aiKey#openai#inv-1", "key-123");
+        tokens.put("REDACTED_SECRET", "openai");
+        tokens.put("REDACTED_SECRET", "key-123");
 
         ExtensionResponse resp = service.query("show my messages");
         assertEquals(ExtensionResponse.Result.FAILURE, resp.getResult());
@@ -124,8 +124,8 @@ class TeamsMcpQueryServiceQueryTest {
     // ── AI plan parsing ──────────────────────────────────────────────────────
 
     private void configureOpenAiKey() {
-        tokens.put("mcp#aiProvider#inv-1", "openai");
-        tokens.put("mcp#aiKey#openai#inv-1", "key-123");
+        tokens.put("REDACTED_SECRET", "openai");
+        tokens.put("REDACTED_SECRET", "key-123");
     }
 
     @Test
@@ -271,8 +271,8 @@ class TeamsMcpQueryServiceQueryTest {
 
     @Test
     void wrapsUnexpectedExceptionsAsAQueryFailedResponse() {
-        tokens.put("mcp#aiProvider#inv-1", "openai");
-        tokens.put("mcp#aiKey#openai#inv-1", "key-123");
+        tokens.put("REDACTED_SECRET", "openai");
+        tokens.put("REDACTED_SECRET", "key-123");
         when(attributeStore.load("inv-1")).thenThrow(new RuntimeException("store down"));
 
         ExtensionResponse resp = service.query("show my messages");
