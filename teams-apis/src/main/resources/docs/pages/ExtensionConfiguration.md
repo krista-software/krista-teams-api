@@ -43,7 +43,7 @@ Navigate to your Azure AD application in the Azure portal to retrieve the requir
    - **Application (client) ID** → This is your **Client ID**
    - **Directory (tenant) ID** → This is your **Tenant ID**
 
-![Client ID and Tenant ID](../_media/ExtensionConfiguration_clientIDtenantID.png)
+![Client ID and Tenant ID](../_media/clientIDtenantID.png)
 
 #### 1.2 Get Client Secret
 
@@ -55,7 +55,7 @@ Navigate to your Azure AD application in the Azure portal to retrieve the requir
 6. **Important**: Copy the **Value** immediately (it won't be shown again)
    - This value is your **Client Secret**
 
-![Client Secret](../_media/ExtensionConfiguration_clientSecret.png)
+![Client Secret](../_media/clientSecret.png)
 
 > **Warning**: The client secret value is only displayed once. If you lose it, you'll need to create a new secret.
 
@@ -67,10 +67,10 @@ The redirect URI (callback URL) must be configured in your Azure AD application 
 
 1. In Krista, navigate to your Teams APIs Extension
 2. Go to the **Details** tab
-3. Copy the **Extension Base URL**
+3. Copy the **Extension Base URL** (also called Routing ID)
    - Example: `https://your-krista-instance.com/extensions/teams-apis`
 
-![Extension Base URL](../_media/ExtensionConfiguration_extensionBaseURL.png)
+![Routing ID](../_media/routingId.png)
 
 #### 2.2 Construct Callback URL
 
@@ -78,7 +78,7 @@ Append `/teams-apis/callback` to the Extension Base URL:
 
 ```
 Format: {Extension Base URL}/teams-apis/callback
-Example: https://your-krista-instance.com/extensions/teams-apis/teams-apis/callback
+Example: https://your-krista-instance.com/extensions/teams-apis/callback
 ```
 
 #### 2.3 Add Redirect URI in Azure AD
@@ -88,6 +88,8 @@ Example: https://your-krista-instance.com/extensions/teams-apis/teams-apis/callb
 3. Select **Web**
 4. Enter your callback URL in **Redirect URIs**
 5. Click **Configure**
+
+![Authorized Redirect URI](../_media/authorizedRedirectURIReference.png)
 
 > **Note**: The redirect URI must match exactly, including the protocol (https://) and path.
 
@@ -105,6 +107,8 @@ Example: https://your-krista-instance.com/extensions/teams-apis/teams-apis/callb
    | **Email** | Enter the Microsoft 365 user email address |
 
 4. Click **Save** or **Test Connection**
+
+![Extension Setup](../_media/setup.png)
 
 ### Step 4: Test Connection
 
@@ -151,7 +155,7 @@ The Teams APIs Extension supports **User Account Authentication** using OAuth 2.
 ### Example
 
 ```
-https://krista.yourcompany.com/extensions/teams-apis/teams-apis/callback
+https://krista.yourcompany.com/extensions/teams-apis/callback
 ```
 
 ---

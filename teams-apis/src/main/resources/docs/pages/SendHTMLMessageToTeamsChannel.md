@@ -8,6 +8,35 @@ Channels in Microsoft Teams are dedicated sections within a team where conversat
 
 This operation is ideal for sending formatted reports, styled announcements, data tables, or any scenario where visual presentation enhances message clarity and impact for team-wide communications.
 
+---
+
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Team.ReadBasic.All` | Access team information | **REQUIRED** |
+| `Channel.ReadBasic.All` | Access channel information | **REQUIRED** |
+| `ChannelMessage.Send` | Send messages to channels | **REQUIRED** |
+
+> **Important**: All permissions listed above are required for this operation to work.
+
+> **Current Behavior**: With required permissions:
+> - ✅ HTML messages are sent successfully to team channels
+> - ✅ The operation completes without errors
+
+> **API Endpoints Used**:
+> - `GET /me/joinedTeams` - Requires `Team.ReadBasic.All` (required)
+> - `GET /teams/{teamId}/channels` - Requires `Channel.ReadBasic.All` (required)
+> - `POST /teams/{teamId}/channels/{channelId}/messages` - Requires `ChannelMessage.Send` (required)
+
+> **Troubleshooting**: If you receive a 403 Forbidden error, verify that these permissions are configured and admin consent has been granted. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **Documentation**: [Microsoft Graph - Send channel message](https://learn.microsoft.com/en-us/graph/api/channel-post-messages)
+
+---
+
 ## Request Details
 
 | Property | Value |

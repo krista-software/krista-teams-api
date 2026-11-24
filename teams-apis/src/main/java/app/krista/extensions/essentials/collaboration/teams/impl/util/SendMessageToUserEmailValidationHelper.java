@@ -13,11 +13,12 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
 
+import app.krista.extension.executor.ErrorBuilder;
 import app.krista.extension.executor.ExtensionResponse;
 import app.krista.extension.executor.ExtensionResponseBuilder;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.SubCatalogConstants;
@@ -126,7 +127,6 @@ public class SendMessageToUserEmailValidationHelper {
      */
     public ExtensionResponse sendMessageToUserWithEmailValidation(String userEmail, String messageContent,
                                                                   boolean reuseChatId, boolean logConversation, boolean isHtml, Boolean allowRetry) {
-        try {
             LOGGER.info("SendMessageToUserEmailValidationHelper.sendMessageToUserWithEmailValidation() called with userEmail: {}, messageContent length: {}, reuseChatId: {}, logConversation: {}, allowRetry: {}",
                     userEmail, messageContent != null ? messageContent.length() : 0, reuseChatId, logConversation, allowRetry);
 
@@ -153,7 +153,7 @@ public class SendMessageToUserEmailValidationHelper {
 
                 // Return error response
                 Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("Status Code", "500");
+                errorResponse.put("Status Code", "");
                 errorResponse.put("Message Id", "");
                 errorResponse.put("Chat Id", "");
                 errorResponse.put("Response Message", "Error: No response received from message service");
@@ -175,21 +175,6 @@ public class SendMessageToUserEmailValidationHelper {
             return new ExtensionResponseBuilder()
                     .success(responseData)
                     .build();
-
-        } catch (Exception e) {
-            LOGGER.error("Error in sendMessageToUserWithEmailValidation for user: {}", userEmail, e);
-
-            // Create error response
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("Status Code", "500");
-            errorResponse.put("Message Id", "");
-            errorResponse.put("Chat Id", "");
-            errorResponse.put("Response Message", "Error: " + e.getMessage());
-
-            return new ExtensionResponseBuilder()
-                    .success(errorResponse)
-                    .build();
-        }
     }
 
     private ExtensionResponse handleValidationFailure(List<ValidationOrchestrator.ValidationResult> validationResults,

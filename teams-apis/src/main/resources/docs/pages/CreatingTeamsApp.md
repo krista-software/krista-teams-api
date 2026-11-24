@@ -28,14 +28,14 @@ Before you begin, ensure you have:
 1. Navigate to the [Azure Portal](https://portal.azure.com/)
 2. Sign in with your Microsoft 365 admin account
 
-![Azure Portal Home Page](../_media/CreatingTeamsApp_homePage.png)
+![Azure Portal Home Page](../_media/homePage.png)
 
 ### Step 2: Navigate to Microsoft Entra ID
 
 1. Under **Azure services**, click **Microsoft Entra ID**
 2. If not visible, click **More services** to find Microsoft Entra ID
 
-![Azure Active Directory](../_media/CreatingTeamsApp_azureActiveDirectory.png)
+![Azure Active Directory](../_media/azureActiveDirectory.png)
 
 > **Note**: Microsoft Entra ID is the new name for Azure Active Directory.
 
@@ -44,13 +44,13 @@ Before you begin, ensure you have:
 1. On the Microsoft Entra ID Overview page
 2. In the left menu under **Manage**, click **App registrations**
 
-![App Registrations](../_media/CreatingTeamsApp_appRegistration.png)
+![App Registrations](../_media/appRegistration.png)
 
 ### Step 4: Create New Application
 
 1. At the top of the App registrations page, click **+ New registration**
 
-![New Registration](../_media/CreatingTeamsApp_newRegistration.png)
+![New Registration](../_media/newRegistration.png)
 
 ### Step 5: Register the Application
 
@@ -75,9 +75,9 @@ Select: **Accounts in this organizational directory only (Single tenant)**
 
 3. Click **Register**
 
-![Register Application](../_media/CreatingTeamsApp_registerApplication.png)
+![Register Application](../_media/register.png)
 
-> **Important**: You must update the redirect URI later with the actual callback URL from your Krista extension. See [Extension Configuration](ExtensionConfiguration.md#step-2-configure-redirect-uri) for details.
+> **Important**: You must update the redirect URI later with the actual callback URL from your Krista extension (see Step 9 below).
 
 ### Step 6: Copy Client ID and Tenant ID
 
@@ -87,7 +87,7 @@ After registration, you'll be redirected to the application's Overview page.
    - **Application (client) ID** → Save as **Client ID**
    - **Directory (tenant) ID** → Save as **Tenant ID**
 
-![Client ID and Tenant ID](../_media/ExtensionConfiguration_clientIDtenantID.png)
+![Client ID and Tenant ID](../_media/clientIDtenantID.png)
 
 > **Note**: Keep these values secure. You'll need them to configure the Teams APIs Extension in Krista.
 
@@ -102,44 +102,46 @@ The application needs specific Microsoft Graph API permissions to access Teams d
 1. In the left menu, click **API permissions**
 2. Click **+ Add a permission**
 
-![Add a Permission](../_media/CreatingTeamsApp_addAPermission.png)
+![Add a Permission](../_media/addAPermission.png)
 
 ### 7.2 Select Microsoft Graph
 
 1. On the **Request API permissions** page
 2. Click **Microsoft Graph**
 
-![Microsoft Graph](../_media/CreatingTeamsApp_microsoftGraph.png)
+![Microsoft Graph](../_media/microsoftGraph.png)
 
 ### 7.3 Select Delegated Permissions
 
 1. Click **Delegated permissions**
 
-![Delegated Permissions](../_media/CreatingTeamsApp_delegatedPermissions.png)
+![Delegated Permissions](../_media/delegatedPermissions.png)
 
-> **Note**: Delegated permissions are used because the extension operates on behalf of a signed-in user.
+> **Note**: Delegated permissions are used because the extension operates on behalf of a signed-in user (Public/Private authentication). The same application is also used for the client-credentials (application-only) flow when configuring Private Authentication with a client secret.
 
 ### 7.4 Add Required Permissions
 
-Search for and select the following permissions:
+Search for and select the following permissions. These are the exact scopes requested by the Teams APIs Extension:
 
 #### Core Permissions (Required)
 
 | Permission | Type | Description | Admin Consent Required |
 |------------|------|-------------|----------------------|
 | `openid` | Delegated | Sign users in | No |
-| `offline_access` | Delegated | Maintain access to data | No |
+| `offline_access` | Delegated | Maintain access to data (refresh tokens) | No |
 | `User.Read` | Delegated | Sign in and read user profile | No |
 
 #### Teams Permissions (Required)
 
 | Permission | Type | Description | Admin Consent Required |
 |------------|------|-------------|----------------------|
-| `Team.ReadBasic.All` | Delegated | Read team information | Yes |
-| `Channel.ReadBasic.All` | Delegated | Read channel information | Yes |
-| `ChannelMessage.Send` | Delegated | Send channel messages | Yes |
-| `Chat.ReadWrite` | Delegated | Read and write chat messages | Yes |
-| `ChatMessage.Send` | Delegated | Send chat messages | Yes |
+| `Team.ReadBasic.All` | Delegated | Read the names and descriptions of teams | Yes |
+| `Channel.ReadBasic.All` | Delegated | Read channel names and descriptions | Yes |
+| `ChannelMessage.Send` | Delegated | Send messages to channels | Yes |
+| `Chat.ReadWrite` | Delegated | Read and write user chats | Yes |
+| `ChatMessage.Send` | Delegated | Send messages in chats | Yes |
+
+> **Note**: This is the complete set of scopes the extension requests (see the **Authentication** tab's scope panel for the same list with per-scope descriptions and the catalog requests each scope enables). Do not add extra Graph permissions beyond these — the extension only requests what is listed above.
 
 **To add each permission:**
 1. Type the permission name in the search box
@@ -147,7 +149,7 @@ Search for and select the following permissions:
 3. Check the permission checkbox
 4. Click **Add permissions**
 
-![Select Permissions](../_media/CreatingTeamsApp_selectPermissions.png)
+![Select Permissions](../_media/selectPermissions.png)
 
 ### 7.5 Grant Admin Consent
 
@@ -159,20 +161,20 @@ After adding all permissions, you must grant admin consent:
 4. Click **Yes** to confirm
 5. Verify each permission shows **Granted for [Your Organization]** with a green checkmark
 
-> **Important**: Admin consent is required for the application to function. Without it, users will not be able to authenticate.
+> **Important**: Admin consent is required for the application to function, and is mandatory when using Private Authentication (client-credentials flow). Without it, users will not be able to authenticate.
 
 ---
 
 ## Step 8: Create Client Secret
 
-The client secret is used to authenticate the application with Microsoft Graph API.
+The client secret is used for Private Authentication (client-credentials flow) and to authenticate the application with Microsoft Graph API.
 
 ### 8.1 Navigate to Certificates & Secrets
 
 1. In the left menu, click **Certificates & secrets**
 2. Under **Client secrets**, click **+ New client secret**
 
-![Certificates & Secrets](../_media/CreatingTeamsApp_certificatesAndSecrets.png)
+![Certificates & Secrets](../_media/certificates&Secrets.png)
 
 ### 8.2 Add Client Secret
 
@@ -182,7 +184,7 @@ The client secret is used to authenticate the application with Microsoft Graph A
    - For production: Set a reminder to rotate before expiration
 3. Click **Add**
 
-![Add Client Secret](../_media/CreatingTeamsApp_addClientSecret.png)
+![Add Client Secret](../_media/addClientSecret.png)
 
 ### 8.3 Copy Client Secret Value
 
@@ -192,7 +194,7 @@ The client secret is used to authenticate the application with Microsoft Graph A
 2. Save it securely (password manager, secure note, etc.)
 3. This is your **Client Secret**
 
-![Client Secret](../_media/ExtensionConfiguration_clientSecret.png)
+![Client Secret](../_media/clientSecret.png)
 
 > **Warning**: If you lose the client secret value, you cannot retrieve it. You'll need to create a new secret.
 
@@ -200,30 +202,30 @@ The client secret is used to authenticate the application with Microsoft Graph A
 
 ## Step 9: Update Redirect URI
 
-After configuring the Teams APIs Extension in Krista, you must update the redirect URI.
+After creating the Azure AD application, you must configure the redirect URI that Krista uses to complete the OAuth sign-in flow.
 
-### 9.1 Get Callback URL from Krista
+### 9.1 Construct the Callback URL
 
-1. In Krista, navigate to your Teams APIs Extension
-2. Go to the **Details** tab
-3. Copy the **Extension Base URL**
-4. Append `/teams-apis/callback` to create the full callback URL
+1. In Krista, open the Teams APIs Extension invoker
+2. Go to the **Authentication** tab
+3. Note the appliance/extension base URL
+4. Append `teams-apis/teams/callback` to build the full redirect URI
 
 **Example**:
 ```
-Extension Base URL: https://your-krista-instance.com/extensions/teams-apis
-Callback URL: https://your-krista-instance.com/extensions/teams-apis/teams-apis/callback
+Appliance URL:  https://your-krista-instance.com
+Redirect URI:   https://your-krista-instance.com/teams-apis/teams/callback
 ```
 
 ### 9.2 Update in Azure AD
 
 1. In your Azure AD application, go to **Authentication**
 2. Under **Web** platform, click **Add URI**
-3. Enter the callback URL from Krista
+3. Enter the redirect URI from step 9.1
 4. Remove the temporary `https://localhost` URI
 5. Click **Save**
 
-> **Note**: The redirect URI must match exactly, including protocol (https://) and path.
+> **Note**: The redirect URI must match exactly, including protocol (https://) and path (`teams-apis/teams/callback`).
 
 ---
 
@@ -236,18 +238,19 @@ After completing all steps, verify your configuration:
 - [ ] Application created in Azure AD
 - [ ] Client ID copied and saved
 - [ ] Tenant ID copied and saved
-- [ ] Client Secret created and saved
-- [ ] All 7 required permissions added
+- [ ] Client Secret created and saved (required for Private Authentication)
+- [ ] All 8 required permissions added (3 core + 5 Teams) (`openid`, `offline_access`, `User.Read`, `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Send`, `Chat.ReadWrite`, `ChatMessage.Send`)
 - [ ] Admin consent granted for all permissions
-- [ ] Redirect URI updated with Krista callback URL
+- [ ] Redirect URI (`teams-apis/teams/callback`) added in Azure AD
 
 ### Test the Configuration
 
-1. In Krista, configure the Teams APIs Extension with your credentials
-2. Click **Test Connection**
-3. You should be redirected to Microsoft login
-4. Sign in and grant permissions
-5. You should see: "User authenticated successfully. Save the changes."
+1. In Krista, open the Teams APIs Extension invoker and go to the **Authentication** tab
+2. Enter your Client ID, Tenant ID, and (for Private Authentication) Client Secret
+3. Click **Test Connection** / **Authorize**
+4. You should be redirected to Microsoft login
+5. Sign in and grant permissions
+6. You should be redirected back to Krista with a successful authentication status, then click **Save**
 
 If the test succeeds, your Azure AD application is correctly configured!
 
@@ -275,10 +278,11 @@ If the test succeeds, your Azure AD application is correctly configured!
 - Review sign-in logs regularly
 - Monitor API usage and quotas
 - Set up alerts for suspicious activity
+- Use the extension's **Teams Audit Dashboard** tab to review credential health and catalog request activity
 
 ### 4. Limit Permissions
 
-- Only grant the minimum required permissions
+- Only grant the minimum required permissions listed in Step 7.4
 - Review permissions quarterly
 - Remove unused permissions
 - Document why each permission is needed
@@ -319,10 +323,10 @@ If the test succeeds, your Azure AD application is correctly configured!
 **Cause**: Callback URL doesn't match configured redirect URI
 
 **Resolution**:
-- Verify redirect URI in Azure AD matches exactly
+- Verify the redirect URI in Azure AD is exactly `{appliance-url}/teams-apis/teams/callback`
 - Check for trailing slashes
 - Ensure HTTPS is used (not HTTP)
-- Confirm the Extension Base URL is correct
+- Confirm the appliance/extension base URL is correct
 
 ---
 
@@ -330,16 +334,13 @@ If the test succeeds, your Azure AD application is correctly configured!
 
 After successfully creating your Azure AD application:
 
-1. [Configure the Extension](ExtensionConfiguration.md) - Set up the extension in Krista
-2. [Review Authentication](Authentication.md) - Understand OAuth 2.0 flows
-3. [Test Your First Request](SendMessageToUser.md) - Send a message to verify setup
+1. Open the Teams APIs Extension invoker's **Authentication** tab in Krista and enter your credentials
+2. Choose the appropriate authentication mode (Public, Private, or Client Credentials) and complete the authorization flow
+3. Run a catalog request such as **Get All Teams** to verify setup
 
 ---
 
 ## See Also
 
-- [Extension Configuration](ExtensionConfiguration.md) - Configure the extension with your credentials
-- [Authentication](Authentication.md) - OAuth 2.0 flows and token management
 - [Microsoft App Registration Documentation](https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app)
 - [Microsoft Graph Permissions Reference](https://docs.microsoft.com/en-us/graph/permissions-reference)
-

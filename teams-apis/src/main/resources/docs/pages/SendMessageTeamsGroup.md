@@ -8,6 +8,23 @@ Group chats in Microsoft Teams are conversations between multiple users that are
 
 This operation is ideal for automated notifications, alerts, status updates, or any scenario where you need to communicate with a specific group of users in a Teams group chat environment.
 
+---
+
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose |
+|------------|---------|
+| `Chat.ReadWrite` | Access and send messages to group chats |
+| `ChatMessage.Send` | Send messages to chats |
+
+> **Important**: All permissions must be added to your Azure AD app registration and admin consent must be granted. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **Troubleshooting**: If you receive a 403 Forbidden error, verify that these permissions are configured and admin consent has been granted. The error message will indicate which specific permission may be missing.
+
+---
+
 ## Request Details
 
 | Property | Value |

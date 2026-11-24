@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -22,40 +22,27 @@ import app.krista.extension.executor.ErrorBuilder;
 import app.krista.extension.executor.ExtensionResponse;
 import app.krista.extension.executor.ExtensionResponseBuilder;
 import app.krista.extensions.essentials.collaboration.teams.catalog.entities.ChannelMessage;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.SubCatalogConstants;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.TeamsResources;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ValidationOrchestrator;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.Validator;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChannelIdValidator;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChannelTeamLinkValidator;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.TeamIdValidator;
-
-import app.krista.extensions.essentials.collaboration.teams.service.ChatService;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.*;
 import app.krista.extensions.essentials.collaboration.teams.service.ChannelService;
+import app.krista.extensions.essentials.collaboration.teams.service.ChatService;
 import app.krista.extensions.essentials.collaboration.teams.service.TeamService;
 import org.jvnet.hk2.annotations.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.DateRangeValidator;
-import app.krista.extensions.essentials.collaboration.teams.impl.util.Constants;
+import java.util.*;
 
 @Service
 public class GetChannelIDHelper {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GetChannelIDHelper.class);
     private static final String STATE_ID = "stateId";
-
+    private static final int MAX_MESSAGES_TO_PROCESS = 50;
     private final ValidationOrchestrator validationOrchestrator;
     private final ErrorHandlingStateManager internalStateManager;
     private final ExtensionResponseGenerator responseGenerator;
@@ -117,41 +104,30 @@ public class GetChannelIDHelper {
     }
 
     public ExtensionResponse getChannelMessagesWithValidation(String channelID, String teamID, Long fromDate, Long toDate, Boolean allowRetry) {
-        try {
-            LOGGER.info("GetChannelIDHelper.getChannelMessagesWithValidation() called with channelID={}, teamID={}, fromDate={}, toDate={}, allowRetry={}",
-                    channelID, teamID, fromDate, toDate, allowRetry);
+        LOGGER.info("GetChannelIDHelper.getChannelMessagesWithValidation() called with channelID={}, teamID={}, fromDate={}, toDate={}, allowRetry={}",
+                channelID, teamID, fromDate, toDate, allowRetry);
 
-            // Step 1: Validate Channel ID and Team ID
-            ExtensionResponse channelTeamValidationResponse = validateChannelAndTeamIds(channelID, teamID, allowRetry);
-            if (channelTeamValidationResponse != null) {
-                return channelTeamValidationResponse;
-            }
-
-            // Step 2: Validate Channel-Team link
-            ExtensionResponse linkValidationResponse = validateChannelTeamLink(channelID, teamID, allowRetry);
-            if (linkValidationResponse != null) {
-                return linkValidationResponse;
-            }
-
-            // Step 3: Validate date range if provided
-            ExtensionResponse dateValidationResponse = validateDateRange(channelID, teamID, fromDate, toDate, allowRetry);
-            if (dateValidationResponse != null) {
-                return dateValidationResponse;
-            }
-
-            // Step 4: Retrieve and return messages
-            return retrieveAndReturnMessages(channelID, teamID, fromDate, toDate);
-        } catch (Exception cause) {
-            LOGGER.error("Error occurred while retrieving channel messages: {}", cause.getMessage(), cause);
-            return generateErrorResponse("Error occurred while retrieving channel messages");
+        // Step 1: Validate Channel ID and Team ID
+        ExtensionResponse channelTeamValidationResponse = validateChannelAndTeamIds(channelID, teamID, allowRetry);
+        if (channelTeamValidationResponse != null) {
+            return channelTeamValidationResponse;
         }
+
+        // Step 3: Validate date range if provided
+        ExtensionResponse dateValidationResponse = validateDateRange(channelID, teamID, fromDate, toDate, allowRetry);
+        if (dateValidationResponse != null) {
+            return dateValidationResponse;
+        }
+
+        // Step 4: Retrieve and return messages
+        return retrieveAndReturnMessages(channelID, teamID, fromDate, toDate);
     }
 
     /**
      * Validates the Channel ID and Team ID.
      *
-     * @param channelID The Channel ID to validate
-     * @param teamID    The Team ID to validate
+     * @param channelID  The Channel ID to validate
+     * @param teamID     The Team ID to validate
      * @param allowRetry Whether to allow retry on validation failure
      * @return An ExtensionResponse if validation fails, null if validation passes
      */
@@ -173,38 +149,12 @@ public class GetChannelIDHelper {
     }
 
     /**
-     * Validates that the Channel ID is linked with the Team ID.
-     *
-     * @param channelID The Channel ID to validate
-     * @param teamID    The Team ID to validate
-     * @param allowRetry Whether to allow retry on validation failure
-     * @return An ExtensionResponse if validation fails, null if validation passes
-     */
-    private ExtensionResponse validateChannelTeamLink(String channelID, String teamID, Boolean allowRetry) {
-        List<ValidationOrchestrator.ValidationResult> linkValidationResults = validationOrchestrator.validate(
-                Map.of(
-                        Validator.ValidationResource.CHANNEL_TEAM_LINK, "link_check",
-                        Validator.ValidationResource.CHANNEL_ID, channelID != null ? channelID : "",
-                        Validator.ValidationResource.TEAM_ID, teamID != null ? teamID : ""
-                )
-        );
-
-        if (!linkValidationResults.isEmpty()) {
-            LOGGER.warn("GetChannelIDHelper.validateChannelTeamLink() - Channel-Team link validation failed with {} errors",
-                    linkValidationResults.size());
-            return handleChannelTeamLinkValidationFailure(linkValidationResults, channelID, teamID, null, null, allowRetry);
-        }
-
-        return null;
-    }
-
-    /**
      * Validates the date range if dates are provided.
      *
-     * @param channelID The Channel ID
-     * @param teamID    The Team ID
-     * @param fromDate  The start date for message retrieval
-     * @param toDate    The end date for message retrieval
+     * @param channelID  The Channel ID
+     * @param teamID     The Team ID
+     * @param fromDate   The start date for message retrieval
+     * @param toDate     The end date for message retrieval
      * @param allowRetry Whether to allow retry on validation failure
      * @return An ExtensionResponse if validation fails, null if validation passes
      */
@@ -272,21 +222,25 @@ public class GetChannelIDHelper {
      */
     private ExtensionResponse retrieveAndReturnMessages(String channelID, String teamID, Long fromDate, Long toDate) {
         LOGGER.debug("All validations passed, proceeding to retrieve channel messages");
-        int maxMessagesToProcess = 50;
-        List<ChannelMessage> result = chatService.getChannelMessagesWithDateRangeLimit(channelID, teamID, fromDate, toDate, maxMessagesToProcess);
-
+        List<ChannelMessage> result = chatService.getChannelMessagesWithDateRangeLimit(channelID, teamID, fromDate, toDate, MAX_MESSAGES_TO_PROCESS);
         // Check if no messages were found in the date range
         if (result.isEmpty()) {
             LOGGER.info("No channel messages found in the provided date range for channelID: {}, teamID: {}", channelID, teamID);
+            String responseMessage = "No channel messages found in the provided date range for channelID: " + channelID;
             // Return empty list instead of string message to maintain type consistency
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Channel Messages", Collections.emptyList()), null, null)
+                    .success(Map.of(
+                            "Channel Messages", Collections.emptyList(),
+                            "Response Message", responseMessage), null, null)
                     .build();
         }
 
         LOGGER.info("Successfully retrieved {} channel messages", result.size());
+        String responseMessage = "Successfully retrieved " + result.size() + " channel message(s) for channelID: " + channelID;
         return new ExtensionResponseBuilder()
-                .success(Map.of("Channel Messages", result), null, null)
+                .success(Map.of(
+                        "Channel Messages", result,
+                        "Response Message", responseMessage), null, null)
                 .build();
     }
 

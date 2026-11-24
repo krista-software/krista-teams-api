@@ -2,7 +2,306 @@
 
 ---
 
-## Version 2.0.8 (Current)
+## Version 4.0.2
+
+**Release Date**: July 2026
+**Krista Service APIs Java**: 1.0.127
+**Global Catalog Version**: GC-2026.07.05
+
+### KE-3414: Fix per-user credential routing for channel operations
+
+Fixed an auth failure where catalog requests running with `invokeAsUser=false` (QUERY_SYSTEM type) always fell back to the operator's service.automation credentials instead of the authenticated user's credentials. This caused channel and team lookups to find the wrong team (service.automation's "Team Digest" instead of the user's), resulting in messages sent to the wrong channel or failing entirely with 403 Forbidden.
+
+**Root cause**: Several service methods called `getUserClient()` or `getJoinedTeams()` directly, which route through `providerFactory.create()`. When `invokeAsUser=false`, this always selects the operator path (service.automation) regardless of whether per-user credentials exist.
+
+**Fix**: All affected methods now use `createPreferringPerUser()`, which checks for saved per-user (wsContact) credentials first and falls back to operator only when none exist. This works correctly for both `invokeAsUser=true` and `invokeAsUser=false` requests.
+
+**Affected methods**:
+
+| Method | Location | Fix |
+|--------|----------|-----|
+| `sendMessageToChannel` — team lookup | `ChatService` | `getJoinedTeams()` → `getJoinedTeamsByNamePreferringPerUser()` |
+| `sendMessageToChannel` — message send | `ChatService` | `getUserClient()` → `initializeGroupChatClient()` |
+| `getChannelsOfTeam` | `ChannelService` | `getUserClient()` → `getPreferringPerUserClient()` |
+| `getChannelsFromTeamName` — team lookup | `ChannelService` | `getJoinedTeams()` → `getJoinedTeamsByNamePreferringPerUser()` |
+| `validateChannelExists` | `ChannelService` | `getUserClient()` → `getPreferringPerUserClient()` |
+| `TeamIdValidator.validate` — team lookup | `TeamIdValidator` | `getJoinedTeams(null)` → `getJoinedTeamsPreferringPerUser()` |
+
+**New methods added**:
+- `TeamService.getJoinedTeamsPreferringPerUser()` — returns all joined teams using per-user credentials (no name filter); used by `TeamIdValidator`
+- `TeamService.getJoinedTeamsByNamePreferringPerUser(String)` — returns teams filtered by name using per-user credentials; used by channel send and channel lookup operations
+- `ChannelService.getPreferringPerUserClient()` — acquires a Graph client preferring per-user credentials; used internally by channel validation and lookup
+
+---
+
+## Version 4.0.1
+
+**Release Date**: July 2026
+
+### KE-3417: Auth scope wiring for Create Channel and Get Recent Group Chats
+
+Wired the **Create Channel** and **Get Recent Group Chats** catalog requests into the `microsoft-auth-sdk` scope configuration (`TeamsAuthConfig.java`), so the Authentication tab's scope panel and consent flow correctly reflect the permissions these requests need.
+
+- **Get Recent Group Chats** — added to the existing `Chat.ReadWrite` scope's catalog request list (no new scope needed; `Chat.ReadWrite` already covers reading the chat list and chat member details).
+- **Create Channel** — added a new `Channel.Create` scope, plus `Group.ReadWrite.All` (standard team auto-create) and `User.Read.All` (private channel member lookup by email), all marked required and added to `defaultScopes`.
+
+---
+
+## Version 4.0.0
+
+**Release Date**: July 2026
+
+### KE-3417: New Authentication / Audit / MCP support
+
+Migrated the Teams APIs extension onto `microsoft-auth-sdk` and added three UI tabs:
+
+- **Authentication** — configure and authorize the Microsoft Teams connection (Quick Setup, own credentials, or app-only), replacing the raw credential fields.
+- **Teams Audit Dashboard** — monitor request activity, success/failure, and credential health.
+- **AI Assistant (MCP)** — ask natural-language questions and send messages via the Microsoft Graph, with per-user authentication and the catalog requests exposed as MCP tools.
+
+---
+
+## Version 2.0.10 (Current)
+
+**Release Date**: July 2026
+**Krista Service APIs Java**: 1.0.127
+**Global Catalog Version**: GC-2026.07.05
+
+### New Features
+
+#### Create Channel
+
+Added a new **Create Channel** catalog request that allows creating Standard or Private channels in a Microsoft Teams team directly from a Krista flow.
+
+**Input Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| Team Name | Text | Yes | Display name of the target team |
+| Channel Name | Text | Yes | Display name for the new channel |
+| Channel Type | Pick One | Yes | `Standard` or `Private` |
+| Members | Text | No | Comma-separated emails (Private channels only) |
+
+**Output Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| Is Channel Created | Boolean | `true` if created successfully |
+| Response Message | Text | Success confirmation or failure reason |
+
+**Key Behaviors**:
+
+| Scenario | Result |
+|----------|--------|
+| Team exists, channel does not exist | Creates channel → Switch ON |
+| Team not found (Standard) | Auto-creates team → Creates channel → Switch ON |
+| Team not found (Private) | Switch OFF — instructions to create team and add account as member |
+| Channel already exists | Switch OFF — duplicate message |
+| Configured account not in team (Private) | Switch OFF — instructions to add account as member |
+| Channel name has invalid characters | Switch OFF — lists all disallowed characters |
+
+**Required Permissions**: `Team.ReadBasic.All`, `Channel.Create`, `User.Read`, `User.Read.All` (Private channels), `Group.ReadWrite.All` (Standard auto-create)
+
+**Documentation**: [Create Channel](CreateChannel.md)
+
+---
+
+#### Get Recent Group Chats
+
+Added a **Get Recent Group Chats** catalog request for retrieving group chats with optional filtering by topic, chat type, and result limit.
+
+**Input Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| Limit | Text | No | Max chats to return (`0` or blank = no limit) |
+| Topic | Text | No | Filter by topic — case-insensitive partial match |
+| Chat Type | Text | No | `group` or `meeting` (blank = both) |
+
+**Output Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| Group Chats | List of Entity (Group Chat) | List of matching group chats with members |
+| Response Message | Text | Count of results or failure reason |
+
+**Key Behaviors**:
+- Chat type defaults to both `group` and `meeting` when Chat Type is blank
+- Topic filter uses case-insensitive partial match
+- Limit stops pagination as soon as the count is reached
+- Member details are enriched in parallel after the chat list is fetched
+
+**Required Permissions**: `Chat.ReadWrite` (covers reading the chat list and chat member details)
+
+**Documentation**: [Get Recent Group Chats](GetRecentGroupChats.md)
+
+---
+
+### Fixed Issues
+
+- **Issue**: Create Channel throwing a raw unhandled exception when private channel creation fails due to Microsoft Teams "parent roster" limitation
+  - **Resolution**: Catches the error specifically and returns switch OFF with actionable instructions to add the configured account as a team member
+
+- **Issue**: Channel names containing `&` or other special characters (e.g., `#`, `%`) causing a 400 Bad Request from Microsoft Graph API with a confusing error
+  - **Resolution**: Channel name is now pre-validated before the API call; returns switch OFF with a clear message listing all disallowed characters
+
+### Documentation Updates
+
+- Added [Create Channel](CreateChannel.md) — full 15-section format documentation page
+- Added [Get Recent Group Chats](GetRecentGroupChats.md) — full 15-section format documentation page
+- Updated sidebar: Create Channel added under **Team & Channel Management**; Get Recent Group Chats added under **Group Chat Management**
+
+### Migration Guide
+
+**No Breaking Changes**: This release is fully backward compatible with version 2.0.9.
+
+**Recommended Actions**:
+1. Add `Channel.Create`, `Group.ReadWrite.All`, and `User.Read.All` permissions in Azure AD if using the new Create Channel request
+2. `Chat.ReadWrite` already covers the new Get Recent Group Chats request — no additional permission needed if it is already granted
+3. Grant admin consent for all newly added permissions
+
+---
+
+## Version 2.0.9
+
+**Release Date**: January 2025
+**Developer**: Amruta Pawar
+**Krista Service APIs Java**: 1.0.115
+**Global Catalog Version**: GC-2026.02.02
+
+### New Features
+
+#### Permission Error Detection and User-Friendly Messages
+
+Added comprehensive permission error handling that surfaces helpful, actionable error messages to the UI when Microsoft Graph API requests fail due to missing permissions.
+
+**Key Improvements**:
+
+1. **Permission Error Detection**
+   - Automatically detects 403 Forbidden errors from Microsoft Graph API
+   - Maps all 12 Teams API operations to their required permissions
+   - Provides operation-specific error messages
+
+2. **User-Friendly Error Messages**
+   - Clear indication of which operation failed
+   - Exact permissions needed (e.g., "User.Read.All or Directory.Read.All, Chat.Create, ChatMessage.Send")
+   - Step-by-step resolution instructions
+   - Link to documentation
+
+3. **Example Error Message**:
+   ```
+   Request failed due to missing Microsoft Graph permissions.
+
+   Operation: Send Message to User
+
+   Required Permissions:
+   - User.Read.All or Directory.Read.All
+   - Chat.Create
+   - ChatMessage.Send
+
+   Resolution Steps:
+   1. Go to Azure Portal (https://portal.azure.com)
+   2. Navigate to Azure Active Directory > App registrations
+   3. Select your Teams API application
+   4. Go to API permissions
+   5. Add the missing permissions listed above
+   6. Grant admin consent for your organization
+   7. Wait a few minutes for permissions to propagate
+   8. Retry the operation
+
+   For detailed instructions, see: Creating Teams App documentation
+   ```
+
+**Impacted Operations** (12 total):
+1. Send Message to User
+2. Send HTML Message to User
+3. Send Message to Channel
+4. Send HTML Message to Channel
+5. Send Message to Group Chat
+6. Send HTML Message to Group Chat
+7. Get Channel Messages
+8. Get Group Chat Messages
+9. Get All Teams
+10. Get All Channels
+11. Get Group Chat by Name
+12. Get Channel Message Replies
+
+**Implementation Details**:
+- Created `PermissionErrorHelper.java` utility class for centralized error handling
+- Enhanced `ChatService.java` with permission error detection for all messaging operations
+- Updated `GetChannelIDHelper.java` to preserve permission error messages
+- Error messages are surfaced to UI through ExtensionResponse error handling
+
+**Benefits**:
+- **Faster Troubleshooting**: Partners can identify missing permissions without checking extension logs
+- **Better User Experience**: Clear, actionable guidance instead of generic 403 errors
+- **Reduced Support Burden**: Self-service resolution with step-by-step instructions
+- **Improved Workflow Authoring**: Easier for new authors to diagnose permission issues
+
+#### Documentation Enhancements
+
+**Permission Mapping Documentation**:
+- Added comprehensive permission requirements table to `CreatingTeamsApp.md`
+- Each catalog request documentation now lists required permissions at the top
+- Clear mapping of operations to Microsoft Graph permissions
+
+**Visual Documentation**:
+- Restored 19 screenshot images in `_media` folder
+- Integrated images into setup documentation:
+  - Azure Portal navigation screenshots
+  - App registration step-by-step visuals
+  - Permission configuration screenshots
+  - Client secret creation visuals
+  - Redirect URI configuration images
+  - Extension setup in Krista screenshots
+
+**Updated Documentation Files** (6 total):
+1. CreatingTeamsApp.md - Added 13 screenshots for Azure AD setup
+2. ExtensionConfiguration.md - Added 5 screenshots for extension configuration
+3. SendMessageToUser.md - Added required permissions section
+4. GetChannelMessages.md - Added required permissions section
+5. SendMessageToTeamsChannel.md - Added required permissions section
+6. SendMessageTeamsGroup.md - Added required permissions section
+
+### Improvements
+
+**Error Handling**:
+- Permission errors are now detected at the service layer and propagated to UI
+- Generic errors replaced with specific, actionable messages
+- Detailed logging for permission errors with operation context
+
+**Code Quality**:
+- Removed unused `handlePermissionError()` method from `GraphServiceExceptionHandler.java`
+- Centralized permission error handling in `PermissionErrorHelper.java`
+- Consistent error handling pattern across all service methods
+
+### Fixed Issues
+
+- **Issue**: Partners experiencing Teams API failures with only generic 403 errors visible in UI
+  - **Resolution**: Implemented permission error detection and user-friendly error messages
+
+- **Issue**: Missing permissions only discoverable through extension logs
+  - **Resolution**: Permission errors now surfaced to UI with specific permission requirements
+
+- **Issue**: Documentation missing visual guidance for Azure AD setup
+  - **Resolution**: Restored and integrated 19 screenshots into setup documentation
+
+- **Issue**: Unclear which permissions are required for each operation
+  - **Resolution**: Added permission requirements to all catalog request documentation
+
+### Migration Guide
+
+**No Breaking Changes**: This release is fully backward compatible with version 2.0.8.
+
+**Recommended Actions**:
+1. Review the updated documentation for permission requirements
+2. Verify all required permissions are granted in your Azure AD application
+3. Test permission error messages in development environment
+4. Update any custom error handling to leverage new detailed error messages
+
+---
+
+## Version 2.0.8
 
 **Release Date**: January 2025
 **Developer**: Vrushali Gaikwad
@@ -340,7 +639,8 @@ Global Catalog Version : GC-2025.10.2
 - **Support**: Refer to Krista support documentation
 
 ### Version History
-- **2.0.7** (Current) - Allow Retry parameter, HTML message length increase
+- **2.0.9** (Current) - Permission error detection, user-friendly error messages, documentation screenshots
+- **2.0.8** - Allow Retry parameter, HTML message length increase
 - **2.0.6** - Complete documentation rewrite, image standardization
 - **2.0.5** - Enhanced error handling, telemetry integration
 - **2.0.4** - New catalog requests, validation framework
@@ -349,6 +649,18 @@ Global Catalog Version : GC-2025.10.2
 ---
 
 ## Upgrade Notes
+
+### Upgrading to 2.0.9
+- No breaking changes
+- Permission error messages significantly improved
+- Documentation enhanced with visual screenshots
+- All existing catalog requests remain compatible
+- Recommended: Review Azure AD permissions against updated documentation
+
+### Upgrading to 2.0.8
+- No breaking changes
+- Allow Retry parameter available for all catalog requests
+- HTML message length limits updated
 
 ### Upgrading to 2.0.6
 - No breaking changes

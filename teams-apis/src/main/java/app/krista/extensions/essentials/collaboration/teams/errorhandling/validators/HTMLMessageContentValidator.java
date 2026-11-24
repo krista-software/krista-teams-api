@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -46,7 +46,7 @@ public class HTMLMessageContentValidator extends BaseTeamsValidator {
     
     // Patterns for HTML content validation
     private static final Pattern ONLY_WHITESPACE_PATTERN = Pattern.compile("^\\s*$");
-    private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[^>]+>");
+
     private static final Pattern SCRIPT_TAG_PATTERN = Pattern.compile("<script[^>]*>.*?</script>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern IFRAME_TAG_PATTERN = Pattern.compile("<iframe[^>]*>.*?</iframe>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     

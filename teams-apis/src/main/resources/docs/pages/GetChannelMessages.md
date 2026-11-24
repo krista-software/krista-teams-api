@@ -8,6 +8,22 @@ This request requires both Channel ID and Team ID for precise channel identifica
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose |
+|------------|---------|
+| `Team.ReadBasic.All` | Access team information |
+| `Channel.ReadBasic.All` | Access channel information |
+| `ChannelMessage.Read.All` | Read channel message history |
+
+> **Important**: All permissions must be added to your Azure AD app registration and admin consent must be granted. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **Troubleshooting**: If you receive a 403 Forbidden error, verify that these permissions are configured and admin consent has been granted. The error message will indicate which specific permission may be missing.
+
+---
+
 ## Request Details
 
 | Property | Value |

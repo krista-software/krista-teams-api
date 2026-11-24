@@ -10,6 +10,34 @@ This request is ideal for sending formatted notifications, styled alerts, or ric
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `User.Read.All` or `Directory.Read.All` | Look up users by email address | **REQUIRED** |
+| `Chat.ReadWrite` or `Chat.Create` | Create new 1:1 chat conversations | **REQUIRED** |
+| `ChatMessage.Send` | Send messages to chats | **REQUIRED** |
+
+> **Important**: All permissions listed above are required for this operation to work. The `Chat.ReadWrite` permission includes chat creation capabilities, so `Chat.Create` is not strictly required when `Chat.ReadWrite` is present.
+
+> **Current Behavior**: With required permissions:
+> - ✅ HTML messages are sent successfully to users
+> - ✅ New 1:1 chat conversations are created automatically if needed
+> - ✅ The operation completes without errors
+
+> **API Endpoints Used**:
+> - `GET /users` with filter - Requires `User.Read.All` (required)
+> - `GET /me/chats` with filter - Requires `Chat.ReadBasic` or `Chat.ReadWrite` (required)
+> - `POST /chats/{chatId}/messages` - Requires `ChatMessage.Send` (required)
+
+> **Troubleshooting**: If you receive a 403 Forbidden error, verify that these permissions are configured and admin consent has been granted. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **Documentation**: [Microsoft Graph - Send chat message](https://learn.microsoft.com/en-us/graph/api/chat-post-messages)
+
+---
+
 ## Request Details
 
 | Property | Value |

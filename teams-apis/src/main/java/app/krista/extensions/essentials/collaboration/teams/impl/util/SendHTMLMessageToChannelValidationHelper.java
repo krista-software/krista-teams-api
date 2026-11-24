@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -24,12 +24,12 @@ import app.krista.extensions.essentials.collaboration.teams.errorhandling.consta
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.TeamsResources;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.utils.SendHTMLMessageToChannelUtils;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChannelNameValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.HTMLMessageContentValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.TeamNameValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ValidationOrchestrator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.Validator;
+import app.krista.extensions.essentials.collaboration.teams.service.ChatService;
 import org.jvnet.hk2.annotations.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,26 +53,25 @@ public class SendHTMLMessageToChannelValidationHelper {
     private final ValidationOrchestrator validationOrchestrator;
     private final ExtensionResponseGenerator responseGenerator;
     private final ErrorHandlingStateManager internalStateManager;
-    private final SendHTMLMessageToChannelUtils sendHTMLMessageToChannelUtils;
     private final TeamNameValidator teamNameValidator;
     private final ChannelNameValidator channelNameValidator;
     private final HTMLMessageContentValidator htmlMessageContentValidator;
+    private final ChatService chatService;
 
     @Inject
     public SendHTMLMessageToChannelValidationHelper(ValidationOrchestrator validationOrchestrator,
-                                                     ExtensionResponseGenerator responseGenerator,
-                                                     ErrorHandlingStateManager internalStateManager,
-                                                     SendHTMLMessageToChannelUtils sendHTMLMessageToChannelUtils,
-                                                     TeamNameValidator teamNameValidator,
-                                                     ChannelNameValidator channelNameValidator,
-                                                     HTMLMessageContentValidator htmlMessageContentValidator) {
+                                                    ExtensionResponseGenerator responseGenerator,
+                                                    ErrorHandlingStateManager internalStateManager,
+                                                    TeamNameValidator teamNameValidator,
+                                                    ChannelNameValidator channelNameValidator,
+                                                    HTMLMessageContentValidator htmlMessageContentValidator, ChatService chatService) {
         this.validationOrchestrator = validationOrchestrator;
         this.responseGenerator = responseGenerator;
         this.internalStateManager = internalStateManager;
-        this.sendHTMLMessageToChannelUtils = sendHTMLMessageToChannelUtils;
         this.teamNameValidator = teamNameValidator;
         this.channelNameValidator = channelNameValidator;
         this.htmlMessageContentValidator = htmlMessageContentValidator;
+        this.chatService = chatService;
 
         // Register validators
         registerValidators();
@@ -134,22 +133,34 @@ public class SendHTMLMessageToChannelValidationHelper {
 
             // If validation passes, proceed with sending the HTML message
             LOGGER.debug("Team name, channel name, and HTML message content validation passed, sending HTML message to channel");
-            Boolean result = sendHTMLMessageToChannelUtils.sendHTMLMessageToChannelWithDetails(teamName, channelName, message);
-
-            LOGGER.info("Successfully processed send HTML message to channel request for team: {}, channel: {}, result: {}", 
+            Boolean result = chatService.sendMessageToChannel(teamName, channelName, message, true);
+            LOGGER.info("Successfully processed send HTML message to channel request for team: {}, channel: {}, result: {}",
                     teamName, channelName, result);
 
-            // Create response with the result
+            // Create response message based on result
+            String responseMessage;
+            if (Boolean.TRUE.equals(result)) {
+                responseMessage = "HTML message successfully sent to channel '" + channelName + "' in team '" + teamName + "'";
+            } else {
+                responseMessage = "Failed to send HTML message to channel '" + channelName + "' in team '" + teamName + "'";
+            }
+
+            // Create response with the result and response message
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Is Message Delivered", result))
+                    .success(Map.of(
+                            "Is Message Delivered", result,
+                            "Response Message", responseMessage))
                     .build();
 
         } catch (Exception e) {
             LOGGER.error("Error in sendHTMLMessageToChannelWithValidation for team: {}, channel: {}", teamName, channelName, e);
 
-            // Create error response
+            // Create error response with error message
+            String errorMessage = "Error sending HTML message to channel '" + channelName + "' in team '" + teamName + "': " + e.getMessage();
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Is Message Delivered", false))
+                    .success(Map.of(
+                            "Is Message Delivered", false,
+                            "Response Message", errorMessage))
                     .build();
         }
     }

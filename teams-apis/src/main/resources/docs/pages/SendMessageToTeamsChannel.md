@@ -8,6 +8,24 @@ Channels in Microsoft Teams are dedicated sections within a team where conversat
 
 This operation is ideal for automated announcements, status updates, notifications, or any scenario where you need to broadcast information to all members of a specific team channel.
 
+---
+
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose |
+|------------|---------|
+| `Team.ReadBasic.All` | Access team information |
+| `Channel.ReadBasic.All` | Access channel information |
+| `ChannelMessage.Send` | Send messages to channels |
+
+> **Important**: All permissions must be added to your Azure AD app registration and admin consent must be granted. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **Troubleshooting**: If you receive a 403 Forbidden error, verify that these permissions are configured and admin consent has been granted. The error message will indicate which specific permission may be missing.
+
+---
+
 ## Request Details
 
 | Property | Value |

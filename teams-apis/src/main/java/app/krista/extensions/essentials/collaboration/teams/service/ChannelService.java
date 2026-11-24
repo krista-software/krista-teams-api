@@ -13,43 +13,73 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.service;
 
 import app.krista.extensions.essentials.collaboration.teams.catalog.entities.Channel;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.Team;
 import app.krista.extensions.essentials.collaboration.teams.impl.connectors.GraphServiceClientProvider;
 import app.krista.extensions.essentials.collaboration.teams.impl.connectors.GraphServiceClientProviderFactory;
-import com.microsoft.graph.requests.ChannelCollectionPage;
-import com.microsoft.graph.requests.ChannelCollectionRequestBuilder;
-import com.microsoft.graph.requests.ConversationMemberCollectionPage;
-import com.microsoft.graph.requests.GraphServiceClient;
-import com.microsoft.graph.models.ConversationMember;
-import com.microsoft.graph.models.AadUserConversationMember;
+import com.microsoft.graph.models.*;
+import com.microsoft.graph.requests.*;
 import okhttp3.Request;
 import org.jvnet.hk2.annotations.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
+import java.util.*;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Service for working with Microsoft Teams channels.
  */
 @Service
 public class ChannelService {
-    private final GraphServiceClientProvider clientProvider;
+    private final GraphServiceClientProviderFactory providerFactory;
+    private final TeamService teamService;
     private static final Logger logger = LoggerFactory.getLogger(ChannelService.class);
 
     @Inject
-    public ChannelService(GraphServiceClientProviderFactory providerFactory) {
-        this.clientProvider = providerFactory.create();
+    public ChannelService(GraphServiceClientProviderFactory providerFactory, TeamService teamService) {
+        this.providerFactory = providerFactory;
+        this.teamService = teamService;
+    }
+
+    /**
+     * Resolves the provider on every call — never cached. This service is an HK2 singleton, so
+     * caching would freeze the first caller's context (typically the operator) and reuse it for
+     * every user, breaking per-user auth. {@code providerFactory.create()} captures the current
+     * request's context (invokeAsUser / wsContact) at call time, and creating it here (not in the
+     * constructor) lets a per-user MustAuthorizeException surface from the catalog method.
+     */
+    private GraphServiceClientProvider clientProvider() {
+        return providerFactory.create();
+    }
+
+    /**
+     * Acquires the delegated Graph client for the current user, translating the SDK's
+     * checked {@link IOException} (token acquisition failure) into a RuntimeException.
+     */
+    private GraphServiceClient<Request> getUserClient() {
+        try {
+            return clientProvider().getGraphServiceClientForUser(null, null);
+        } catch (IOException cause) {
+            throw new RuntimeException("We couldn't acquire a Microsoft Graph client for the current user. Please try again.", cause);
+        }
+    }
+
+    /**
+     * Acquires a Graph client preferring per-user (wsContact) credentials over operator,
+     * falling back to operator silently if no per-user credentials exist.
+     */
+    private GraphServiceClient<Request> getPreferringPerUserClient() {
+        return providerFactory.getPreferringPerUserGraphClient();
     }
 
     /**
@@ -66,13 +96,37 @@ public class ChannelService {
             return Collections.emptyList();
         }
 
-        GraphServiceClient<Request> graphServiceClientForUser = clientProvider.getGraphServiceClientForUser(null, null);
+        GraphServiceClient<Request> graphServiceClientForUser = getPreferringPerUserClient();
 
         // Retrieve channels from the Graph API based on the provided parameters
         ChannelCollectionPage channels = getChannelsFromGraphAPI(graphServiceClientForUser, teamId);
 
         // Process and return the list of channels
         return retrieveChannelsList(channels, teamId, channelName);
+    }
+
+    /**
+     * Helper method to retrieve channels from the team name.
+     *
+     * @param teamName The name of the team
+     * @return List of channels for the team
+     */
+    public List<Channel> getChannelsFromTeamName(String teamName) {
+        logger.debug("Calling Teams API: teamService.getJoinedTeamsByNamePreferringPerUser with teamName={}", teamName);
+        List<Team> joinedTeams = teamService.getJoinedTeamsByNamePreferringPerUser(teamName);
+        logger.debug("Teams API response: received {} joined teams", joinedTeams != null ? joinedTeams.size() : 0);
+
+        if (joinedTeams != null) {
+            logger.debug("Calling Teams API: channelService.getChannelsOfTeam with teamId={}", joinedTeams.getFirst().iD);
+
+            List<Channel> channels = getChannelsOfTeam(joinedTeams.getFirst().iD, null);
+            logger.debug("Teams API response: received {} channels for team {}",
+                    channels != null ? channels.size() : 0, teamName);
+
+            return channels;
+        } else {
+            return Collections.emptyList();
+        }
     }
 
     /**
@@ -135,16 +189,6 @@ public class ChannelService {
                         channelEntity.description = channel.description;
                         channelEntity.email = channel.email;
                         channelEntity.teamID = teamId;
-
-                        // Retrieve and populate channel members
-                        GraphServiceClient<Request> graphClient = clientProvider.getGraphServiceClientForUser(null, null);
-                        channelEntity.members = getChannelMembers(graphClient, teamId, channel.id);
-
-                        if (channelEntity.members != null && !channelEntity.members.isEmpty()) {
-                            for (int i = 0; i < channelEntity.members.size(); i++) {
-                                Map<String, Object> member = channelEntity.members.get(i);
-                            }
-                        }
                         return channelEntity;
                     }
                 }
@@ -171,7 +215,7 @@ public class ChannelService {
     private List<Channel> getAllChannels(ChannelCollectionPage channels, String teamId) {
 
         List<Channel> channelList = new ArrayList<>();
-        GraphServiceClient<Request> graphClient = clientProvider.getGraphServiceClientForUser(null, null);
+        GraphServiceClient<Request> graphClient = getUserClient();
 
         while (channels != null) {
             for (com.microsoft.graph.models.Channel channel : channels.getCurrentPage()) {
@@ -181,25 +225,6 @@ public class ChannelService {
                 myChannel.description = channel.description;
                 myChannel.email = channel.email;
                 myChannel.teamID = teamId;
-
-                // Retrieve and populate channel members
-                myChannel.members = getChannelMembers(graphClient, teamId, channel.id);
-
-                // Log the members information for each channel
-                logger.info("Channel '{}' has {} members", myChannel.name,
-                        myChannel.members != null ? myChannel.members.size() : 0);
-                if (myChannel.members != null && !myChannel.members.isEmpty()) {
-                    logger.info("Members for channel '{}': {}", myChannel.name, myChannel.members);
-                    for (int i = 0; i < myChannel.members.size(); i++) {
-                        Map<String, Object> member = myChannel.members.get(i);
-                        logger.info("Member {}: Name='{}', Email='{}'",
-                                i + 1, member.get("Name"), member.get("Email"));
-                    }
-                } else {
-                    logger.warn("No members found for channel '{}' - this may be due to insufficient permissions",
-                            myChannel.name);
-                }
-
                 channelList.add(myChannel);
             }
 
@@ -212,6 +237,126 @@ public class ChannelService {
         }
 
         return channelList;
+    }
+
+    /**
+     * Create a new channel in a team.
+     *
+     * @param teamName    The name of the team.
+     * @param channelName The name of the channel to create.
+     * @param channelType "Standard" or "Private".
+     * @param members     Comma-separated member emails (used for Private channels).
+     * @return Map with "isCreated" (Boolean) and "message" (String).
+     */
+    public Map<String, Object> createChannel(String teamName, String channelName, String channelType, String members) {
+        // Validate channel name against Microsoft Teams character restrictions
+        if (channelName != null && channelName.chars().anyMatch(c -> "&~#%*{}+/\\:<>?|'\"\\,".indexOf(c) >= 0)) {
+            return Map.of("isCreated", false,
+                    "message", "Channel name contains invalid characters. These are not allowed in Teams channel names: & ~ # % * { } + / \\ : < > ? | ' \" ,");
+        }
+
+        List<Team> teams = teamService.getJoinedTeams(teamName);
+
+        String teamId;
+        if (teams == null || teams.isEmpty()) {
+            if ("Private".equalsIgnoreCase(channelType)) {
+                return Map.of("isCreated", false,
+                        "message", "Team '" + teamName + "' not found. Please create the team in Microsoft Teams, add the configured account as a member/owner, then run this request again.");
+            }
+            // Standard channel: auto-create the team
+            logger.info("Team '{}' not found. Creating it automatically for standard channel.", teamName);
+            teamId = teamService.createTeamAndGetId(teamName);
+            if (teamId == null) {
+                return Map.of("isCreated", false,
+                        "message", "Team '" + teamName + "' could not be created. Please create it manually in Microsoft Teams and run this request again.");
+            }
+        } else {
+            teamId = teams.getFirst().iD;
+        }
+
+        List<Channel> existing = getChannelsOfTeam(teamId, channelName);
+        if (!existing.isEmpty()) {
+            return Map.of("isCreated", false, "message", "Channel '" + channelName + "' already exists in team '" + teamName + "'.");
+        }
+
+        boolean isPrivate = "Private".equalsIgnoreCase(channelType);
+
+        GraphServiceClient<Request> graphClient = getUserClient();
+
+        com.microsoft.graph.models.Channel newChannel = new com.microsoft.graph.models.Channel();
+        newChannel.displayName = channelName;
+        newChannel.membershipType = isPrivate ? ChannelMembershipType.PRIVATE : ChannelMembershipType.STANDARD;
+
+        if (isPrivate) {
+            List<ConversationMember> memberList = new ArrayList<>();
+
+            // Add current authenticated user as owner (required by Graph API for private channels)
+            User currentUser = graphClient.me().buildRequest().select("id").get();
+            if (currentUser != null && currentUser.id != null) {
+                AadUserConversationMember owner = new AadUserConversationMember();
+                owner.oDataType = "#microsoft.graph.aadUserConversationMember";
+                owner.roles = new ArrayList<>(List.of("owner"));
+                owner.additionalDataManager().put("user@odata.bind",
+                        new com.google.gson.JsonPrimitive("https://graph.microsoft.com/v1.0/users('" + currentUser.id + "')"));
+                memberList.add(owner);
+            }
+
+            // Add extra members from comma-separated email list
+            if (members != null && !members.isBlank()) {
+                for (String email : members.split(",")) {
+                    String trimmed = email.trim();
+                    if (!trimmed.isEmpty()) {
+                        String userId = getUserIdByEmail(graphClient, trimmed);
+                        if (userId != null) {
+                            AadUserConversationMember m = new AadUserConversationMember();
+                            m.oDataType = "#microsoft.graph.aadUserConversationMember";
+                            m.roles = new ArrayList<>(List.of("member"));
+                            m.additionalDataManager().put("user@odata.bind",
+                                    new com.google.gson.JsonPrimitive("https://graph.microsoft.com/v1.0/users('" + userId + "')"));
+                            memberList.add(m);
+                        } else {
+                            logger.warn("Could not resolve user ID for email: {}", trimmed);
+                        }
+                    }
+                }
+            }
+
+            if (!memberList.isEmpty()) {
+                newChannel.members = new ConversationMemberCollectionPage(memberList, null);
+            }
+        }
+
+        try {
+            graphClient.teams(teamId).channels().buildRequest().post(newChannel);
+        } catch (Exception e) {
+            String errMsg = e.getMessage() != null ? e.getMessage() : "";
+            if (errMsg.contains("not part of the parent roster") || errMsg.contains("parent roster")) {
+                return Map.of("isCreated", false,
+                        "message", "Cannot create private channel '" + channelName + "' in team '" + teamName +
+                                "'. The configured account is not a member of this team. " +
+                                "Please open the team in Microsoft Teams, add the configured account as a member/owner, and run this request again.");
+            }
+            throw e;
+        }
+
+        return Map.of("isCreated", true, "message", "Channel '" + channelName + "' created successfully in team '" + teamName + "'.");
+    }
+
+    private String getUserIdByEmail(GraphServiceClient<Request> graphClient, String userEmail) {
+        try {
+            String filterQuery = "mail eq '" + userEmail + "' or userPrincipalName eq '" + userEmail + "'";
+            UserCollectionPage users = graphClient.users()
+                    .buildRequest()
+                    .filter(filterQuery)
+                    .select("id,mail,userPrincipalName")
+                    .get();
+            if (users != null && !users.getCurrentPage().isEmpty()) {
+                return users.getCurrentPage().get(0).id;
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to resolve user ID for email: {}", userEmail, e);
+        }
+        return null;
     }
 
     /**
@@ -229,7 +374,7 @@ public class ChannelService {
         }
 
         try {
-            GraphServiceClient<Request> graphServiceClientForUser = clientProvider.getGraphServiceClientForUser(null, null);
+            GraphServiceClient<Request> graphServiceClientForUser = getPreferringPerUserClient();
 
             if (teamId != null && !teamId.isBlank()) {
                 // If team ID is provided, try to get the specific channel from the team
@@ -269,93 +414,6 @@ public class ChannelService {
         }
 
         return false;
-    }
-
-    /**
-     * Retrieve channel members from Microsoft Graph API.
-     *
-     * @param client    The Graph API client.
-     * @param teamId    The ID of the team.
-     * @param channelId The ID of the channel.
-     * @return A list of maps containing member information (Name and Email).
-     */
-    private List<Map<String, Object>> getChannelMembers(GraphServiceClient<Request> client, String teamId, String channelId) {
-        List<Map<String, Object>> membersList = new ArrayList<>();
-
-        try {
-            logger.info("Retrieving members for channel: {} in team: {}", channelId, teamId);
-            logger.info("Making API call to: /teams/{}/channels/{}/members", teamId, channelId);
-
-            ConversationMemberCollectionPage members = client.teams(teamId)
-                    .channels(channelId)
-                    .members()
-                    .buildRequest()
-                    .get();
-
-            logger.info("Successfully received member collection page from API");
-            int pageCount = 0;
-
-            while (members != null) {
-                pageCount++;
-                logger.info("Processing page {} of members, current page has {} members",
-                        pageCount, members.getCurrentPage().size());
-
-                for (ConversationMember member : members.getCurrentPage()) {
-                    logger.info("Processing member of type: {}", member.getClass().getSimpleName());
-
-                    if (member instanceof AadUserConversationMember) {
-                        AadUserConversationMember aadMember = (AadUserConversationMember) member;
-
-                        logger.info("Found AAD User Member - ID: {}, DisplayName: {}, Email: {}",
-                                aadMember.id, aadMember.displayName, aadMember.email);
-
-                        Map<String, Object> memberInfo = new HashMap<>();
-                        memberInfo.put("Name", aadMember.displayName != null ? aadMember.displayName : "Unknown");
-                        memberInfo.put("Email", aadMember.email != null ? aadMember.email : "");
-
-                        membersList.add(memberInfo);
-                        logger.info("Added member to list: Name='{}', Email='{}'",
-                                memberInfo.get("Name"), memberInfo.get("Email"));
-                    } else {
-                        logger.warn("Skipping member of unsupported type: {}", member.getClass().getSimpleName());
-                    }
-                }
-
-                // Check if there are more pages
-                var nextPage = members.getNextPage();
-                if (nextPage != null) {
-                    members = nextPage.buildRequest().get();
-                } else {
-                    break;
-                }
-            }
-
-            logger.info("Successfully retrieved {} members for channel: {}", membersList.size(), channelId);
-
-            // Print all members for debugging
-            if (!membersList.isEmpty()) {
-                logger.info("=== MEMBERS LIST FOR CHANNEL {} ===", channelId);
-                for (int i = 0; i < membersList.size(); i++) {
-                    Map<String, Object> member = membersList.get(i);
-                    logger.info("Member {}: {}", i + 1, member);
-                }
-                logger.info("=== END MEMBERS LIST ===");
-            } else {
-                logger.warn("No members were added to the list for channel: {}", channelId);
-            }
-
-        } catch (Exception e) {
-            logger.error("Error retrieving channel members for channel: {} in team: {}. Error: {}",
-                    channelId, teamId, e.getMessage());
-            logger.error("Exception type: {}", e.getClass().getSimpleName());
-            if (e.getCause() != null) {
-                logger.error("Caused by: {}", e.getCause().getMessage());
-            }
-            // Return empty list on error to avoid breaking the channel retrieval
-        }
-
-        logger.info("Returning members list with {} items for channel: {}", membersList.size(), channelId);
-        return membersList;
     }
 }
 

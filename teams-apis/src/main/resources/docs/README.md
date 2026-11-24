@@ -6,13 +6,13 @@
 
 The Teams APIs Extension enables seamless integration with Microsoft Teams through the Microsoft Graph API. This extension allows you to automate team communications, retrieve messages, manage channels, and interact with group chats programmatically within your Krista workflows.
 
-## What's New in Version 2.0.7
+## What's New in Version 2.0.9
 
 **Latest Updates**:
-- **Allow Retry Parameter** - Added to all 14 catalog requests for better validation control
-- **Message Length Limits Updated** - Removed validator max length, Teams API enforces ~28,000 character limit
-- **User-Friendly Error Messages** - Clear guidance when messages exceed Teams API limits
-- **Teams 2024+ Support** - Documentation updated for new Teams client capabilities (80K-100K chars for manual messages)
+- **Permission Error Detection** - Automatically detects missing Microsoft Graph permissions and provides actionable error messages
+- **User-Friendly Error Messages** - Clear guidance on which permissions are missing and how to fix them
+- **Visual Documentation** - 19 screenshots added to setup guides for Azure AD and extension configuration
+- **Permission Mapping** - Each operation now clearly lists required Microsoft Graph permissions
 
 **[View Full Release Notes](/pages/release-notes)** for detailed information about all changes, improvements, and migration guidance.
 
@@ -103,7 +103,7 @@ Message Content: Hello from Krista!
 ## Support & Resources
 
 ### Extension Information
-- **Version**: 2.0.8
+- **Version**: 2.0.9
 - **API**: Microsoft Graph API v1.0
 - **Authentication**: OAuth 2.0
 - **Supported Scopes**: Chat.ReadWrite, Team.ReadBasic.All, Channel.ReadBasic.All, ChannelMessage.Read.All

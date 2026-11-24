@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.generators;
@@ -114,20 +114,27 @@ public class ExtensionResponseGenerator {
         LOGGER.info("ExtensionResponseGenerator.generateFetchDenyResponse() called with {} validation results for subCatalogRequest: {}",
                 validationResults.size(), subCatalogRequestName);
 
-        StringJoiner stepMessage = new StringJoiner(", ", "Updated value for ", " were not provided.");
-        StringBuilder errMessage = new StringBuilder();
+        // Build detailed error message with actual validation errors
+        StringBuilder detailedMessage = new StringBuilder();
+        detailedMessage.append("Validation failed:\n\n");
+
         for (ValidationOrchestrator.ValidationResult validationResult : validationResults) {
-            stepMessage.add("'" + validationResult.getFetchFieldName() + "'");
-            errMessage.append(validationResult.getErrMessage()).append("\n");
+            String fieldName = validationResult.getFetchFieldName();
+            String errorMessage = validationResult.getErrMessage();
+
+            // Add field name and error message
+            detailedMessage.append("• ").append(fieldName).append(": ").append(errorMessage).append("\n");
         }
 
-        // Use a user-friendly message for deny responses
+        detailedMessage.append("\nPlease correct the errors and try again.");
+
+        // Use the detailed validation error message
         String denyMessage = "Operation cancelled. No values were updated.";
         ExtensionResponse response = ExtensionResponseFactory.create(denyMessage, exceptionType,
-                List.of(RemediationActionFactory.createInformActionALLParticipants(stepMessage.toString(), List.of())),
+                List.of(RemediationActionFactory.createInformActionALLParticipants(detailedMessage.toString(), List.of())),
                 subCatalogRequestName, state);
 
-        LOGGER.debug("ExtensionResponseGenerator.generateFetchDenyResponse() completed successfully - Deny response generated");
+        LOGGER.debug("ExtensionResponseGenerator.generateFetchDenyResponse() completed successfully - Deny response generated with detailed errors");
 
         return response;
     }

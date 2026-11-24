@@ -8,6 +8,34 @@ Unlike the team name-based request, this operation uses the team ID for exact ma
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Team.ReadBasic.All` | Access team information | **REQUIRED** |
+| `Channel.ReadBasic.All` | Access channel information | **REQUIRED** |
+| `ChannelMember.Read.All` | Read channel member information | **OPTIONAL** |
+
+> **Important**: The `Team.ReadBasic.All` and `Channel.ReadBasic.All` permissions are required and allow retrieving channel information. The `ChannelMember.Read.All` permission is optional - if not configured, channel member lists will be returned as empty arrays. The operation will still succeed and return channel information, but without member details.
+
+> **Current Behavior**: With only required permissions:
+> - ✅ Channel IDs, names, descriptions, and emails are retrieved successfully
+> - ⚠️ Channel member lists are returned as empty arrays `[]`
+> - ✅ The operation completes without errors (graceful degradation)
+
+> **To Get Full Channel Member Information**: Add the `ChannelMember.Read.All` permission to your Azure AD app registration and grant admin consent. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **API Endpoints Used**:
+> - `GET /teams/{teamId}` - Requires `Team.ReadBasic.All` (required)
+> - `GET /teams/{teamId}/channels` - Requires `Channel.ReadBasic.All` (required)
+> - `GET /teams/{teamId}/channels/{channelId}/members` - Requires `ChannelMember.Read.All` (optional)
+
+> **Documentation**: [Microsoft Graph - List channels](https://learn.microsoft.com/en-us/graph/api/channel-list) | [Microsoft Graph - List channel members](https://learn.microsoft.com/en-us/graph/api/channel-list-members)
+
+---
+
 ## Request Details
 
 | Property | Value |

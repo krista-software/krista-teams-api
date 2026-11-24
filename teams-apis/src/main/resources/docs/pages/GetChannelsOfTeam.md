@@ -8,6 +8,38 @@ This request accepts a team name as input and returns all channels within that t
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Team.ReadBasic.All` | Access team information and list joined teams | **REQUIRED** |
+| `Channel.ReadBasic.All` | Access channel information | **REQUIRED** |
+| `TeamMember.Read.All` | Read team member information | **OPTIONAL** |
+| `ChannelMember.Read.All` | Read channel member information | **OPTIONAL** |
+
+> **Important**: The `Team.ReadBasic.All` and `Channel.ReadBasic.All` permissions are required and allow retrieving team and channel information. The `TeamMember.Read.All` and `ChannelMember.Read.All` permissions are optional - if not configured, member lists will be returned as empty arrays. The operation will still succeed and return channel information, but without member details.
+
+> **Current Behavior**: With only required permissions:
+> - ✅ Team IDs, names, and descriptions are retrieved successfully
+> - ✅ Channel IDs, names, descriptions, and emails are retrieved successfully
+> - ⚠️ Team member lists are returned as empty arrays `[]`
+> - ⚠️ Channel member lists are returned as empty arrays `[]`
+> - ✅ The operation completes without errors (graceful degradation)
+
+> **To Get Full Member Information**: Add the `TeamMember.Read.All` and `ChannelMember.Read.All` permissions to your Azure AD app registration and grant admin consent. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **API Endpoints Used**:
+> - `GET /me/joinedTeams` - Requires `Team.ReadBasic.All` (required)
+> - `GET /teams/{teamId}/channels` - Requires `Channel.ReadBasic.All` (required)
+> - `GET /teams/{teamId}/members` - Requires `TeamMember.Read.All` (optional)
+> - `GET /teams/{teamId}/channels/{channelId}/members` - Requires `ChannelMember.Read.All` (optional)
+
+> **Documentation**: [Microsoft Graph - List channels](https://learn.microsoft.com/en-us/graph/api/channel-list) | [Microsoft Graph - List team members](https://learn.microsoft.com/en-us/graph/api/team-list-members) | [Microsoft Graph - List channel members](https://learn.microsoft.com/en-us/graph/api/channel-list-members)
+
+---
+
 ## Request Details
 
 | Property | Value |

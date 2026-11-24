@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -31,18 +31,18 @@ import java.util.regex.Pattern;
  * Provides common functionality for Teams validators including email validation and user existence checks.
  */
 public abstract class BaseTeamsValidator implements Validator {
-    
+
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseTeamsValidator.class);
-    
+
     // Email validation pattern - comprehensive regex for email validation
     protected static final Pattern EMAIL_PATTERN = Pattern.compile(
-        "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+            "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
     );
-    
+
     // Email length constraints
     protected static final int MIN_EMAIL_LENGTH = 5;  // Minimum reasonable email length (a@b.c)
     protected static final int MAX_EMAIL_LENGTH = 254; // RFC 5321 limit
-    
+
     protected final String fieldName;
     protected final String fieldType;
     protected final ChatService chatService;
@@ -50,8 +50,8 @@ public abstract class BaseTeamsValidator implements Validator {
     /**
      * Creates a new BaseTeamsValidator.
      *
-     * @param fieldName The field name for this validator
-     * @param fieldType The field type for this validator
+     * @param fieldName   The field name for this validator
+     * @param fieldType   The field type for this validator
      * @param chatService The chat service for Teams operations
      */
     protected BaseTeamsValidator(String fieldName, String fieldType, ChatService chatService) {
@@ -77,35 +77,30 @@ public abstract class BaseTeamsValidator implements Validator {
     public Boolean validate(String resourceId, Map<ValidationResource, String> context) {
         LOGGER.debug("{}.validate() called with value: {}", this.getClass().getSimpleName(), resourceId);
 
-        try {
-            // Step 1: Basic null/blank validation
-            if (ValidationUtils.isStringNullOrBlank(resourceId)) {
-                LOGGER.warn("{} validation failed: value is null or blank", fieldName);
-                return false;
-            }
-
-            String trimmedValue = resourceId.trim();
-
-            // Step 2: Format validation
-            if (!isValidFormat(trimmedValue)) {
-                LOGGER.warn("{} validation failed: invalid format - {}", fieldName, resourceId);
-                return false;
-            }
-
-            // Step 3: Business logic validation
-            ValidationResult result = performBusinessValidation(trimmedValue, context);
-            if (!result.isValid()) {
-                LOGGER.warn("{} validation failed: {} - {}", fieldName, result.getErrorMessage(), resourceId);
-                return false;
-            }
-
-            LOGGER.debug("{} validation passed for: {}", fieldName, resourceId);
-            return true;
-
-        } catch (Exception e) {
-            LOGGER.error("Exception during {} validation for '{}': {}", fieldName, resourceId, e.getMessage(), e);
+//        try {
+        // Step 1: Basic null/blank validation
+        if (ValidationUtils.isStringNullOrBlank(resourceId)) {
+            LOGGER.warn("{} validation failed: value is null or blank", fieldName);
             return false;
         }
+
+        String trimmedValue = resourceId.trim();
+
+        // Step 2: Format validation
+        if (!isValidFormat(trimmedValue)) {
+            LOGGER.warn("{} validation failed: invalid format - {}", fieldName, resourceId);
+            return false;
+        }
+
+        // Step 3: Business logic validation
+        ValidationResult result = performBusinessValidation(trimmedValue, context);
+        if (!result.isValid()) {
+            LOGGER.warn("{} validation failed: {} - {}", fieldName, result.getErrorMessage(), resourceId);
+            return false;
+        }
+
+        LOGGER.debug("{} validation passed for: {}", fieldName, resourceId);
+        return true;
     }
 
     /**
@@ -122,7 +117,7 @@ public abstract class BaseTeamsValidator implements Validator {
      * Subclasses should override this method to provide specific business validation.
      *
      * @param trimmedValue The trimmed input value
-     * @param context The validation context
+     * @param context      The validation context
      * @return ValidationResult indicating success or failure with error message
      */
     protected abstract ValidationResult performBusinessValidation(String trimmedValue, Map<ValidationResource, String> context);
@@ -150,14 +145,14 @@ public abstract class BaseTeamsValidator implements Validator {
         if (ValidationUtils.isStringNullOrBlank(resourceId)) {
             return fieldName + " is required and cannot be blank.";
         }
-        
+
         String trimmedValue = resourceId.trim();
-        
+
         // Check format first
         if (!isValidFormat(trimmedValue)) {
             return getFormatErrorMessage(trimmedValue);
         }
-        
+
         // If format is valid but business validation failed, return business logic error
         return getBusinessLogicErrorMessage(trimmedValue);
     }
@@ -172,35 +167,35 @@ public abstract class BaseTeamsValidator implements Validator {
         if (ValidationUtils.isStringNullOrBlank(email)) {
             return false;
         }
-        
+
         String trimmedEmail = email.trim();
-        
+
         // Check length constraints
         if (trimmedEmail.length() < MIN_EMAIL_LENGTH || trimmedEmail.length() > MAX_EMAIL_LENGTH) {
             return false;
         }
-        
+
         // Check email pattern
         if (!EMAIL_PATTERN.matcher(trimmedEmail).matches()) {
             return false;
         }
-        
+
         // Additional structural validation
         String[] parts = trimmedEmail.split("@");
         if (parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
             return false;
         }
-        
+
         // Check domain part has at least one dot
         if (!parts[1].contains(".")) {
             return false;
         }
-        
+
         // Check for consecutive dots or other invalid patterns
         if (trimmedEmail.contains("..") || trimmedEmail.startsWith(".") || trimmedEmail.endsWith(".")) {
             return false;
         }
-        
+
         return true;
     }
 
@@ -212,25 +207,19 @@ public abstract class BaseTeamsValidator implements Validator {
      * @return true if user exists and is accessible, false otherwise
      */
     protected boolean userExistsInTeams(String email) {
-        try {
-            if (chatService == null) {
-                LOGGER.warn("ChatService not available, skipping user existence validation for: {}", email);
-                return true; // If service is not available, assume valid (format validation already passed)
-            }
+        if (chatService == null) {
+            LOGGER.warn("ChatService not available, skipping user existence validation for: {}", email);
+            return true; // If service is not available, assume valid (format validation already passed)
+        }
 
-            LOGGER.debug("Checking if user exists in Teams: {}", email);
-            boolean userExists = chatService.validateUserExists(email);
+        LOGGER.debug("Checking if user exists in Teams: {}", email);
+        boolean userExists = chatService.validateUserExists(email);
 
-            if (userExists) {
-                LOGGER.debug("User validation successful for: {}", email);
-                return true;
-            } else {
-                LOGGER.warn("User not found or not accessible in Teams: {}", email);
-                return false;
-            }
-
-        } catch (Exception e) {
-            LOGGER.error("Error checking user existence in Teams for '{}': {}", email, e.getMessage(), e);
+        if (userExists) {
+            LOGGER.debug("User validation successful for: {}", email);
+            return true;
+        } else {
+            LOGGER.warn("User not found or not accessible in Teams: {}", email);
             return false;
         }
     }

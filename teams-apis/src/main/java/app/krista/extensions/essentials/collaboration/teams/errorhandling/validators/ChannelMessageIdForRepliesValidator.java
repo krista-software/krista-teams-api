@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -69,8 +69,8 @@ public class ChannelMessageIdForRepliesValidator extends BaseValidator {
             }
 
             // Step 2: API-based validation - check if message exists
-            String channelId = context.get(ValidationResource.CHANNEL_ID_FOR_REPLIES);
-            String teamId = context.get(ValidationResource.TEAM_ID_FOR_REPLIES);
+            String channelId = context.get(ValidationResource.CHANNEL_ID);
+            String teamId = context.get(ValidationResource.TEAM_ID);
 
             if (ValidationUtils.isStringNullOrBlank(channelId) || ValidationUtils.isStringNullOrBlank(teamId)) {
                 LOGGER.warn("Cannot validate message existence: missing channel ID or team ID context");

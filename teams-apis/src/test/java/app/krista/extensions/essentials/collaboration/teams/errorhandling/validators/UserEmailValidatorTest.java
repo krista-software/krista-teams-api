@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -148,19 +148,6 @@ class UserEmailValidatorTest {
             assertFalse(result);
         }
 
-        @Test
-        @DisplayName("Should handle service exception gracefully")
-        void testServiceException() {
-            // Mock service throws exception
-            when(chatService.validateUserExists(anyString()))
-                    .thenThrow(new RuntimeException("Service unavailable"));
-
-            Map<Validator.ValidationResource, String> context = new HashMap<>();
-
-            Boolean result = validator.validate("user@example.com", context);
-
-            assertFalse(result);
-        }
     }
 
     @Nested

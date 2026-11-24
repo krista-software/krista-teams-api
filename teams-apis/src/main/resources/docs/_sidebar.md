@@ -7,6 +7,11 @@
   * [Authentication](/pages/Authentication)
   * [Creating Teams App](/pages/CreatingTeamsApp)
 
+* **Extension Tabs**
+  * [Authentication Tab](/pages/Authentication)
+  * [Teams Audit Dashboard](/pages/AuditDashboard)
+  * [AI Assistant](/pages/AIAssistant)
+
 * **Messaging Operations**
   * [Send Message Teams Group](/pages/SendMessageTeamsGroup)
   * [Send HTML Message Teams Group](/pages/SendHTMLMessageTeamsGroup)
@@ -19,6 +24,7 @@
   * [Get All Teams](/pages/GetAllTeams)
   * [Get Channels of Team](/pages/GetChannelsOfTeam)
   * [Get Channels of Team by Team ID](/pages/GetChannelsOfTeamByTeamID)
+  * [Create Channel](/pages/CreateChannel)
 
 * **Message Retrieval**
   * [Get Channel Messages](/pages/GetChannelMessages)
@@ -28,3 +34,4 @@
 * **Group Chat Management**
   * [Get All Group Chats](/pages/GetAllGroupChats)
   * [Get Group Chat by Name](/pages/GetGroupChatByName)
+  * [Get Recent Group Chats](/pages/GetRecentGroupChats)

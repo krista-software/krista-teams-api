@@ -8,6 +8,27 @@ This request accepts a group chat topic name as input and returns the matching g
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Chat.ReadBasic` or `Chat.Read` or `Chat.ReadWrite` | Access chat information and list chats | **REQUIRED** |
+
+> **Important**: The `Chat.ReadBasic` (or `Chat.Read` or `Chat.ReadWrite`) permission is required and allows retrieving group chat information by name.
+
+> **Current Behavior**: With required permissions:
+> - ✅ Group chat ID, topic, type, and creation timestamp are retrieved successfully
+> - ✅ The operation completes without errors
+
+> **API Endpoints Used**:
+> - `GET /me/chats` with filter - Requires `Chat.ReadBasic` (least privileged) or `Chat.Read` or `Chat.ReadWrite` (required)
+
+> **Documentation**: [Microsoft Graph - List chats](https://learn.microsoft.com/en-us/graph/api/chat-list)
+
+---
+
 ## Request Details
 
 | Property | Value |

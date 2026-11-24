@@ -8,6 +8,32 @@ This is a simple query operation with no input parameters required. It returns a
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Team.ReadBasic.All` | Access team information and list joined teams | **REQUIRED** |
+| `TeamMember.Read.All` | Read team member information | **OPTIONAL** |
+
+> **Important**: The `Team.ReadBasic.All` permission is required and allows retrieving team information. The `TeamMember.Read.All` permission is optional - if not configured, team member lists will be returned as empty arrays. The operation will still succeed and return team information, but without member details.
+
+> **Current Behavior**: With only `Team.ReadBasic.All` permission:
+> - ✅ Team IDs, names, and descriptions are retrieved successfully
+> - ⚠️ Team member lists are returned as empty arrays `[]`
+> - ✅ The operation completes without errors (graceful degradation)
+
+> **To Get Full Team Member Information**: Add the `TeamMember.Read.All` permission to your Azure AD app registration and grant admin consent. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **API Endpoints Used**:
+> - `GET /me/joinedTeams` - Requires `Team.ReadBasic.All` (required)
+> - `GET /teams/{teamId}/members` - Requires `TeamMember.Read.All` (optional)
+
+> **Documentation**: [Microsoft Graph - List joinedTeams](https://learn.microsoft.com/en-us/graph/api/user-list-joinedteams) | [Microsoft Graph - List team members](https://learn.microsoft.com/en-us/graph/api/team-list-members)
+
+---
+
 ## Request Details
 
 | Property | Value |

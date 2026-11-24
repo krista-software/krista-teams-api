@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.stores;
@@ -43,6 +43,10 @@ public final class RefreshTokenStore {
 
     public void remove(String key) {
         keyValueStore.remove(key);
+    }
+
+    public KeyValueStore getKeyValueStore() {
+        return keyValueStore;
     }
 
 }

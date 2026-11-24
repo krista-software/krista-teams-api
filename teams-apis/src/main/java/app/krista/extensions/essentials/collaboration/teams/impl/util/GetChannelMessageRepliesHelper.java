@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -26,7 +26,7 @@ import app.krista.extensions.essentials.collaboration.teams.errorhandling.consta
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.TeamsResources;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChannelIdForRepliesValidator;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChannelIdValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChannelMessageIdForRepliesValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ValidationOrchestrator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.Validator;
@@ -78,9 +78,9 @@ public class GetChannelMessageRepliesHelper {
     private void registerValidators() {
         try {
             // Register Channel ID validator for replies
-            ChannelIdForRepliesValidator channelIdForRepliesValidator = new ChannelIdForRepliesValidator(channelService);
-            validationOrchestrator.registerValidator(Validator.ValidationResource.CHANNEL_ID_FOR_REPLIES, channelIdForRepliesValidator);
-            LOGGER.info("Registered ChannelIdForRepliesValidator for CHANNEL_ID_FOR_REPLIES");
+            ChannelIdValidator channelIdValidator = new ChannelIdValidator(channelService);
+            validationOrchestrator.registerValidator(Validator.ValidationResource.CHANNEL_ID, channelIdValidator);
+            LOGGER.info("Registered ChannelValidator for CHANNEL_ID");
 
             // Register Channel Message ID validator for replies
             ChannelMessageIdForRepliesValidator channelMessageIdForRepliesValidator = new ChannelMessageIdForRepliesValidator(chatService);
@@ -102,8 +102,8 @@ public class GetChannelMessageRepliesHelper {
             List<ValidationOrchestrator.ValidationResult> validationResults = validationOrchestrator.validate(
                     Map.of(
                             Validator.ValidationResource.CHANNEL_MESSAGE_ID_FOR_REPLIES, channelMessageId != null ? channelMessageId : "",
-                            Validator.ValidationResource.CHANNEL_ID_FOR_REPLIES, channelId != null ? channelId : "",
-                            Validator.ValidationResource.TEAM_ID_FOR_REPLIES, teamId != null ? teamId : ""
+                            Validator.ValidationResource.CHANNEL_ID, channelId != null ? channelId : "",
+                            Validator.ValidationResource.TEAM_ID, teamId != null ? teamId : ""
                     )
             );
 
@@ -120,22 +120,30 @@ public class GetChannelMessageRepliesHelper {
             if (result == null || result.isEmpty()) {
                 LOGGER.warn("No replies found for channel message ID: {}", channelMessageId);
 
-                // Return empty list instead of string message to maintain type consistency
+                String responseMessage = "No replies found for channel message ID: " + channelMessageId;
                 return new ExtensionResponseBuilder()
-                        .success(Map.of("Replies List", Collections.emptyList()))
+                        .success(Map.of(
+                                "Replies List", Collections.emptyList(),
+                                "Response Message", responseMessage))
                         .build();
             }
 
-            // Return the replies
+            LOGGER.info("Successfully retrieved {} replies for channel message ID: {}", result.size(), channelMessageId);
+
+            String responseMessage = "Successfully retrieved " + result.size() + " reply/replies for channel message ID: " + channelMessageId;
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Replies List", result))
+                    .success(Map.of(
+                            "Replies List", result,
+                            "Response Message", responseMessage))
                     .build();
         } catch (Exception e) {
             LOGGER.error("Error retrieving channel message replies: {}", e.getMessage(), e);
+
+            String responseMessage = "Error retrieving channel message replies for message ID '" + channelMessageId + "': " + e.getMessage();
             return new ExtensionResponseBuilder()
                     .failure(new ErrorBuilder()
                             .exceptionType(ExtensionResponse.Error.ExceptionType.SYSTEM_ERROR)
-                            .errorMessage("Error retrieving channel message replies: " + e.getMessage())
+                            .errorMessage(responseMessage)
                             .build())
                     .build();
         }

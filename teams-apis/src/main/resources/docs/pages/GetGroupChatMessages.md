@@ -8,6 +8,28 @@ This request requires a Chat ID to identify the group chat, along with a require
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Chat.ReadBasic` or `Chat.Read` or `Chat.ReadWrite` | Access chat information and read messages | **REQUIRED** |
+
+> **Important**: The `Chat.ReadBasic` (or `Chat.Read` or `Chat.ReadWrite`) permission is required and allows reading chat messages. The `Chat.ReadWrite` permission includes read capabilities.
+
+> **Current Behavior**: With required permissions:
+> - ✅ Chat messages are retrieved successfully
+> - ✅ Message content, sender information, and timestamps are available
+> - ✅ The operation completes without errors
+
+> **API Endpoints Used**:
+> - `GET /chats/{chatId}/messages` - Requires `Chat.ReadBasic` (least privileged) or `Chat.Read` or `Chat.ReadWrite` (required)
+
+> **Documentation**: [Microsoft Graph - List chat messages](https://learn.microsoft.com/en-us/graph/api/chat-list-messages)
+
+---
+
 ## Request Details
 
 | Property | Value |

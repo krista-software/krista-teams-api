@@ -13,25 +13,24 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.catalog;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
+import app.krista.extension.authorization.MustAuthorizeException;
 import app.krista.extension.executor.ErrorBuilder;
 import app.krista.extension.executor.ExtensionResponse;
 import app.krista.extension.executor.ExtensionResponseBuilder;
+import app.krista.extension.impl.anno.Attribute;
 import app.krista.extension.impl.anno.CatalogRequest;
-import app.krista.extension.impl.anno.*;
-import app.krista.extensions.essentials.collaboration.teams.catalog.entities.*;
-import app.krista.extensions.essentials.collaboration.teams.impl.util.*;
+import app.krista.extension.impl.anno.Domain;
+import app.krista.extension.impl.anno.Field;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.Channel;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.GroupChat;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.Team;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.utils.GraphServiceExceptionHandler;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.utils.SendMessageToUserUtils;
-
+import app.krista.extensions.essentials.collaboration.teams.impl.util.*;
 import app.krista.extensions.essentials.collaboration.teams.service.ChannelService;
 import app.krista.extensions.essentials.collaboration.teams.service.ChatService;
 import app.krista.extensions.essentials.collaboration.teams.service.TeamService;
@@ -41,6 +40,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 @Domain(id = "catEntryDomain_5fa2fc97-4b17-44cf-b98f-aa91a459a091",
         name = "Collaboration",
@@ -57,10 +59,8 @@ public class TeamsAPIsArea {
     private final GetGroupChatByNameHelper getGroupChatByNameHelper;
     private final GetChannelMessageRepliesHelper getChannelMessageRepliesHelper;
     private final GetChannelsOfTeamHelper getChannelsOfTeamHelper;
-    private final SendMessageToUserUtils sendMessageToUserUtils;
     private final SendMessageToUserEmailValidationHelper sendMessageToUserEmailValidationHelper;
     private final TelemetryHelper telemetryHelper;
-    private final SendMessageToUserResponseProcessingUtils sendMessageToUserResponseProcessingUtils;
     private final SendHTMLMessageToUserValidationHelper sendHTMLMessageToUserValidationHelper;
     private final SendHTMLMessageToChannelValidationHelper sendHTMLMessageToChannelValidationHelper;
     private final TelemetryMetrics telemetryMetrics;
@@ -72,10 +72,8 @@ public class TeamsAPIsArea {
                          GetGroupChatByNameHelper getGroupChatByNameHelper,
                          GetChannelMessageRepliesHelper getChannelMessageRepliesHelper,
                          GetChannelsOfTeamHelper getChannelsOfTeamHelper,
-                         SendMessageToUserUtils sendMessageToUserUtils,
                          SendMessageToUserEmailValidationHelper sendMessageToUserEmailValidationHelper,
                          TelemetryHelper telemetryHelper,
-                         SendMessageToUserResponseProcessingUtils sendMessageToUserResponseProcessingUtils,
                          SendHTMLMessageToUserValidationHelper sendHTMLMessageToUserValidationHelper,
                          SendHTMLMessageToChannelValidationHelper sendHTMLMessageToChannelValidationHelper, TelemetryMetrics telemetryMetrics) {
         logger.trace("TeamsAPIsArea constructor called");
@@ -89,10 +87,8 @@ public class TeamsAPIsArea {
         this.getGroupChatByNameHelper = getGroupChatByNameHelper;
         this.getChannelMessageRepliesHelper = getChannelMessageRepliesHelper;
         this.getChannelsOfTeamHelper = getChannelsOfTeamHelper;
-        this.sendMessageToUserUtils = sendMessageToUserUtils;
         this.sendMessageToUserEmailValidationHelper = sendMessageToUserEmailValidationHelper;
         this.telemetryHelper = telemetryHelper;
-        this.sendMessageToUserResponseProcessingUtils = sendMessageToUserResponseProcessingUtils;
         this.sendHTMLMessageToUserValidationHelper = sendHTMLMessageToUserValidationHelper;
         this.sendHTMLMessageToChannelValidationHelper = sendHTMLMessageToChannelValidationHelper;
 
@@ -104,25 +100,46 @@ public class TeamsAPIsArea {
             name = "Get channels of team",
             description = "Retrieves all available channels for the given team name",
             area = "Teams APIs",
-            type = CatalogRequest.Type.CHANGE_SYSTEM)
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
     @Field.Desc(name = "Channels", type = "[ Entity(Channel) ]", required = false)
-    public List<Channel> getChannelsOfTeam(
-            @Field.Text(name = "Team Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String teamName,
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
+    public ExtensionResponse getChannelsOfTeam(
+            @Field.Text(name = "Team Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String teamName,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getChannelsOfTeam");
 
         try {
             logger.info("getChannelsOfTeam() called with teamName: {}, allowRetry: {}", teamName, allowRetry);
-            List<Channel> channels = getChannelsDirectly(teamName);
+            List<Channel> channels = channelService.getChannelsFromTeamName(teamName);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNELS_OF_TEAM_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
-            return channels;
+
+            String responseMessage = channels.isEmpty()
+                    ? "No channels found for team '" + teamName + "'"
+                    : "Successfully retrieved " + channels.size() + " channel(s) for team '" + teamName + "'";
+
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Channels", channels,
+                            "Response Message", responseMessage))
+                    .build();
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNELS_OF_TEAM_REQUEST_FAILURE, 1L);
             logger.error("Error occurred while retrieving channels for team: {}", teamName, cause);
-            throw cause;
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to retrieve channels for team '" + teamName + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -131,11 +148,13 @@ public class TeamsAPIsArea {
             name = "Send message teams group",
             description = "Sending a message to the given group name",
             area = "Teams APIs",
-            type = CatalogRequest.Type.CHANGE_SYSTEM)
-    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {})
-    public Boolean sendMessageTeamsGroup(
-            @Field.Text(name = "Group Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String groupName,
-            @Field.Text(name = "Message", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String message,
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
+    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")})
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
+    public ExtensionResponse sendMessageTeamsGroup(
+            @Field.Text(name = "Group Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String groupName,
+            @Field.Text(name = "Message", attributes = {@Attribute(name = "visualWidth", value = "S")}) String message,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("sendMessageTeamsGroup");
@@ -143,14 +162,44 @@ public class TeamsAPIsArea {
         try {
             logger.info("sendMessageTeamsGroup() called with groupName: {}, allowRetry: {}", groupName, allowRetry);
             Boolean result = chatService.sendMessageToChatGroup(groupName, message, false);
-            telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TEAMS_GROUP_REQUEST_SUCCESS, 1L);
-            operation.recordSuccess();
-            return result;
+
+            if (Boolean.TRUE.equals(result)) {
+                telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TEAMS_GROUP_REQUEST_SUCCESS, 1L);
+                operation.recordSuccess();
+
+                return new ExtensionResponseBuilder()
+                        .success(Map.of(
+                                "Is Message Delivered", true,
+                                "Response Message", "Message successfully sent to group '" + groupName + "'"))
+                        .build();
+            } else {
+                telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TEAMS_GROUP_REQUEST_FAILURE, 1L);
+                operation.recordFailure(new Exception("Failed to send message - service returned false"));
+
+                ExtensionResponse.Error error = new ErrorBuilder()
+                        .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                        .errorMessage("Failed to send message to group '" + groupName + "'")
+                        .build();
+
+                return new ExtensionResponseBuilder()
+                        .failure(error)
+                        .build();
+            }
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TEAMS_GROUP_REQUEST_FAILURE, 1L);
             logger.error("Error in sendMessageTeamsGroup for group: {}", groupName, cause);
-            throw cause;
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to send message to group '" + groupName + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -159,11 +208,13 @@ public class TeamsAPIsArea {
             name = "Send HTML message teams group",
             description = "Send HTML message teams group",
             area = "Teams APIs",
-            type = CatalogRequest.Type.CHANGE_SYSTEM)
-    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {})
-    public Boolean sendHTMLMessageTeamsGroup(
-            @Field.Text(name = "Group Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String groupName,
-            @Field(name = "Message", type = "RichText", required = true, attributes = {@Attribute(name = "visualWidth", value = "L")}, options = {}) String message,
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
+    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")})
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
+    public ExtensionResponse sendHTMLMessageTeamsGroup(
+            @Field.Text(name = "Group Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String groupName,
+            @Field(name = "Message", type = "RichText", attributes = {@Attribute(name = "visualWidth", value = "L")}) String message,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("sendHTMLMessageTeamsGroup");
@@ -171,22 +222,51 @@ public class TeamsAPIsArea {
         try {
             int messageLength = message != null ? message.length() : 0;
             logger.info("sendHTMLMessageTeamsGroup() called with groupName: {}, allowRetry: {}, HTML message length: {} characters",
-                groupName, allowRetry, messageLength);
+                    groupName, allowRetry, messageLength);
             Boolean result = chatService.sendMessageToChatGroup(groupName, message, true);
-            telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TEAMS_GROUP_REQUEST_SUCCESS, 1L);
-            operation.recordSuccess();
-            return result;
+
+            if (Boolean.TRUE.equals(result)) {
+                telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TEAMS_GROUP_REQUEST_SUCCESS, 1L);
+                operation.recordSuccess();
+
+                return new ExtensionResponseBuilder()
+                        .success(Map.of(
+                                "Is Message Delivered", true,
+                                "Response Message", "HTML message successfully sent to group '" + groupName + "'"))
+                        .build();
+            } else {
+                telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TEAMS_GROUP_REQUEST_FAILURE, 1L);
+                operation.recordFailure(new Exception("Failed to send HTML message - service returned false"));
+
+                ExtensionResponse.Error error = new ErrorBuilder()
+                        .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                        .errorMessage("Failed to send HTML message to group '" + groupName + "'")
+                        .build();
+
+                return new ExtensionResponseBuilder()
+                        .failure(error)
+                        .build();
+            }
         } catch (GraphServiceException gse) {
-            GraphServiceExceptionHandler.handleMessageTooLargeErrorAndThrow(gse, message, "group '" + groupName + "'",
+            return GraphServiceExceptionHandler.handleMessageTooLargeError(gse, message, "group '" + groupName + "'",
                     TelemetryConstants.SEND_HTML_MESSAGE_TEAMS_GROUP_REQUEST_FAILURE, operation, telemetryMetrics);
-            return false;
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TEAMS_GROUP_REQUEST_FAILURE, 1L);
             int messageLength = message != null ? message.length() : 0;
             logger.error("Error in sendHTMLMessageTeamsGroup for group: {}, HTML message length: {} characters",
-                groupName, messageLength, cause);
-            throw cause;
+                    groupName, messageLength, cause);
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to send HTML message to group '" + groupName + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -195,12 +275,14 @@ public class TeamsAPIsArea {
             name = "Send message to teams channel",
             description = "Sending a message to the provided team's channel",
             area = "Teams APIs",
-            type = CatalogRequest.Type.CHANGE_SYSTEM)
-    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {})
-    public Boolean sendMessageToTeamsChannel(
-            @Field.Text(name = "Team Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String teamName,
-            @Field.Text(name = "Channel Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String channelName,
-            @Field.Text(name = "Message", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String message,
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
+    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")})
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
+    public ExtensionResponse sendMessageToTeamsChannel(
+            @Field.Text(name = "Team Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String teamName,
+            @Field.Text(name = "Channel Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String channelName,
+            @Field.Text(name = "Message", attributes = {@Attribute(name = "visualWidth", value = "S")}) String message,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("sendMessageToTeamsChannel");
@@ -208,14 +290,44 @@ public class TeamsAPIsArea {
         try {
             logger.info("sendMessageToTeamsChannel() called with teamName: {}, channelName: {}, allowRetry: {}", teamName, channelName, allowRetry);
             Boolean result = chatService.sendMessageToChannel(teamName, channelName, message);
-            telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TO_CHANNEL_REQUEST_SUCCESS, 1L);
-            operation.recordSuccess();
-            return result;
+
+            if (Boolean.TRUE.equals(result)) {
+                telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TO_CHANNEL_REQUEST_SUCCESS, 1L);
+                operation.recordSuccess();
+
+                return new ExtensionResponseBuilder()
+                        .success(Map.of(
+                                "Is Message Delivered", true,
+                                "Response Message", "Message successfully sent to channel '" + channelName + "' in team '" + teamName + "'"))
+                        .build();
+            } else {
+                telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TO_CHANNEL_REQUEST_FAILURE, 1L);
+                operation.recordFailure(new Exception("Failed to send message - service returned false"));
+
+                ExtensionResponse.Error error = new ErrorBuilder()
+                        .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                        .errorMessage("Failed to send message to channel '" + channelName + "' in team '" + teamName + "'")
+                        .build();
+
+                return new ExtensionResponseBuilder()
+                        .failure(error)
+                        .build();
+            }
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TO_CHANNEL_REQUEST_FAILURE, 1L);
             logger.error("Error in sendMessageToTeamsChannel for team: {}, channel: {}", teamName, channelName, cause);
-            throw cause;
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to send message to channel '" + channelName + "' in team '" + teamName + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -224,28 +336,35 @@ public class TeamsAPIsArea {
             name = "Get Channel Messages",
             description = "Get channel messages by channel ID",
             area = "Teams APIs",
-            type = CatalogRequest.Type.QUERY_SYSTEM)
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
     @Field.Desc(name = "Channel Messages", type = "[ Entity(Channel Message) ]", required = false)
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse getChannelMessages(
-            @Field.Text(name = "Channel ID", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The channel ID of the Teams channel'")}, options = {}) String channelID,
-            @Field.Text(name = "Team ID", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The team ID of the Teams team'")}, options = {}) String teamID,
-            @Field.Date(name = "From Date", required = false, includeTimeOfDay = true, allowPast = true, allowToday = true, allowFuture = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The start date from when, to retrieve channel messages'")}, options = {}) Long fromDate,
-            @Field.Date(name = "To Date", required = false, includeTimeOfDay = true, allowPast = true, allowToday = true, allowFuture = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The end date to when, to retrieve channel messages'")}, options = {}) Long toDate,
+            @Field.Text(name = "Channel ID", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The channel ID of the Teams channel'")}) String channelID,
+            @Field.Text(name = "Team ID", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The team ID of the Teams team'")}) String teamID,
+            @Field.Date(name = "From Date", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The start date from when, to retrieve channel messages'")}) Long fromDate,
+            @Field.Date(name = "To Date", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The end date to when, to retrieve channel messages'")}) Long toDate,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
-
+        logger.info("TeamsAPIsArea.getChannelMessages() called with channelID={}, teamID={}, fromDate={}, toDate={}, allowRetry={}", channelID, teamID, fromDate, toDate, allowRetry);
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getChannelMessages");
-
         try {
-            logger.info("TeamsAPIsArea.getChannelMessages() called with channelID={}, teamID={}, fromDate={}, toDate={}, allowRetry={}", channelID, teamID, fromDate, toDate, allowRetry);
             ExtensionResponse response = getChannelIDHelper.getChannelMessagesWithValidation(channelID, teamID, fromDate, toDate, allowRetry);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNEL_MESSAGES_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
             return response;
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNEL_MESSAGES_REQUEST_FAILURE, 1L);
             logger.error("Error in getChannelMessages for channelID: {}, teamID: {}", channelID, teamID, cause);
-            throw cause;
+
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Channel Messages", Collections.emptyList(),
+                            "Response Message", "Failed to retrieve channel messages: " + cause.getMessage()))
+                    .build();
         }
     }
 
@@ -254,12 +373,14 @@ public class TeamsAPIsArea {
             name = "Get Group Chat Messages",
             description = "Get group chats by chat ID",
             area = "Teams APIs",
-            type = CatalogRequest.Type.QUERY_SYSTEM)
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
     @Field.Desc(name = "Group Chat Messages", type = "[ Entity(Channel Message) ]", required = false)
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse getGroupChatMessages(
-            @Field.Text(name = "Chat ID", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The chat ID of the Teams group chat'")}, options = {}) String chatID,
-            @Field.Date(name = "From Date", required = true, includeTimeOfDay = true, allowPast = true, allowToday = true, allowFuture = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The start date from when, to retrieve group chats'")}, options = {}) Long fromDate,
-            @Field.Date(name = "To Date", required = false, includeTimeOfDay = true, allowPast = true, allowToday = true, allowFuture = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The end date to when, to retrieve group chats'")}, options = {}) Long toDate,
+            @Field.Text(name = "Chat ID", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The chat ID of the Teams group chat'")}) String chatID,
+            @Field.Date(name = "From Date", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The start date from when, to retrieve group chats'")}) Long fromDate,
+            @Field.Date(name = "To Date", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The end date to when, to retrieve group chats'")}) Long toDate,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getGroupChatMessages");
@@ -270,11 +391,21 @@ public class TeamsAPIsArea {
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_GROUP_CHAT_MESSAGES_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
             return response;
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_GROUP_CHAT_MESSAGES_REQUEST_FAILURE, 1L);
             logger.error("Error in getGroupChatMessages for chatID: {}", chatID, cause);
-            throw cause;
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to retrieve group chat messages for chatID '" + chatID + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -283,10 +414,12 @@ public class TeamsAPIsArea {
             name = "Get Group Chat by Name",
             description = "Get details of a group chat by name",
             area = "Teams APIs",
-            type = CatalogRequest.Type.QUERY_SYSTEM)
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
     @Field.Desc(name = "Group", type = "Entity(Group Chat)", required = false)
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse getGroupChatByName(
-            @Field.Text(name = "Group Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The name of the group chat'")}, options = {}) String groupName,
+            @Field.Text(name = "Group Name", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The name of the group chat'")}) String groupName,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getGroupChatByName");
@@ -297,11 +430,21 @@ public class TeamsAPIsArea {
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_GROUP_CHAT_BY_NAME_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
             return response;
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_GROUP_CHAT_BY_NAME_REQUEST_FAILURE, 1L);
             logger.error("Error in getGroupChatByName for groupName: {}", groupName, cause);
-            throw cause;
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to retrieve group chat by name '" + groupName + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -310,23 +453,40 @@ public class TeamsAPIsArea {
             name = "Get All Teams",
             description = "Get a list of all Teams the user has access to",
             area = "Teams APIs",
-            type = CatalogRequest.Type.QUERY_SYSTEM)
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
     @Field.Desc(name = "Teams", type = "[ Entity(Team) ]", required = false)
-    public List<Team> getAllTeams() {
-
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
+    public ExtensionResponse getAllTeams() {
+        logger.debug("getTeams called");
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getAllTeams");
 
         try {
-            logger.debug("getTeams called");
             List<Team> teams = teamService.getJoinedTeams(null);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_ALL_TEAMS_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
-            return teams;
+
+            String responseMessage = teams.isEmpty()
+                    ? "No teams found for the user"
+                    : "Successfully retrieved " + teams.size() + " team(s)";
+
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Teams", teams,
+                            "Response Message", responseMessage))
+                    .build();
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_ALL_TEAMS_REQUEST_FAILURE, 1L);
             logger.error("Error in getAllTeams", cause);
-            throw cause;
+
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Teams", Collections.emptyList(),
+                            "Response Message", "Failed to retrieve teams: " + cause.getMessage()))
+                    .build();
         }
     }
 
@@ -335,25 +495,86 @@ public class TeamsAPIsArea {
             name = "Get All Group Chats",
             description = "Get details of all group chats the user has access to",
             area = "Teams APIs",
-            type = CatalogRequest.Type.QUERY_SYSTEM)
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
     @Field.Desc(name = "Group Chats", type = "[ Entity(Group Chat) ]", required = false)
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse getAllGroupChats() {
-
+        logger.debug("getAllGroupChats called");
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getAllGroupChats");
-
         try {
-            logger.debug("getAllGroupChats called");
             List<GroupChat> groupChats = chatService.getAllGroupChats();
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_ALL_GROUP_CHATS_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
+
+            String responseMessage = groupChats.isEmpty()
+                    ? "No group chats found for the user"
+                    : "Successfully retrieved " + groupChats.size() + " group chat(s)";
+
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Group Chats", groupChats))
+                    .success(Map.of(
+                            "Group Chats", groupChats,
+                            "Response Message", responseMessage))
                     .build();
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_ALL_GROUP_CHATS_REQUEST_FAILURE, 1L);
             logger.error("Error in getAllGroupChats", cause);
+
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Group Chats", Collections.emptyList(),
+                            "Response Message", "Failed to retrieve group chats: " + cause.getMessage()))
+                    .build();
+        }
+    }
+
+    @CatalogRequest(
+            id = "localDomainRequest_c8f3a2b1-7e4d-4c9a-b2d3-8e7f6a5b4c3d",
+            name = "Get Recent Group Chats",
+            description = "Get recent group chats filtered by topic and chat type with an optional limit",
+            area = "Teams APIs",
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
+    @Field.Desc(name = "Group Chats", type = "[ Entity(Group Chat) ]", required = false)
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
+    public ExtensionResponse getRecentGroupChats(
+            @Field.Text(name = "Limit", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+                    @Attribute(name = "toolTip", value = "'Maximum number of chats to return (0 or blank = no limit)'")}) String limitStr,
+            @Field.Text(name = "Topic", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+                    @Attribute(name = "toolTip", value = "'Filter chats by topic (partial match)'")}) String topic,
+            @Field.Text(name = "Chat Type", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+                    @Attribute(name = "toolTip", value = "'Filter by chat type: group or meeting (leave blank for both)'")}) String chatType) {
+
+        TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getRecentGroupChats");
+        try {
+            logger.info("getRecentGroupChats() called with limit={}, topic={}, chatType={}", limitStr, topic, chatType);
+            int limitValue = 0;
+            try { if (limitStr != null && !limitStr.isBlank()) limitValue = Integer.parseInt(limitStr.trim()); } catch (NumberFormatException ignored) {}
+            List<GroupChat> groupChats = chatService.getFilteredGroupChats(limitValue, topic, chatType);
+            operation.recordSuccess();
+
+            String responseMessage = groupChats.isEmpty()
+                    ? "No group chats found"
+                    : "Successfully retrieved " + groupChats.size() + " group chat(s)";
+
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Group Chats", groupChats,
+                            "Response Message", responseMessage))
+                    .build();
+        } catch (MustAuthorizeException cause) {
             throw cause;
+        } catch (Exception cause) {
+            operation.recordFailure(cause);
+            logger.error("Error in getRecentGroupChats", cause);
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Group Chats", Collections.emptyList(),
+                            "Response Message", "Failed to retrieve group chats: " + cause.getMessage()))
+                    .build();
         }
     }
 
@@ -362,12 +583,14 @@ public class TeamsAPIsArea {
             name = "Get Channel Message Replies",
             description = "Get channel message replies (thread) by message Id",
             area = "Teams APIs",
-            type = CatalogRequest.Type.QUERY_SYSTEM)
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
     @Field.Desc(name = "Replies List", type = "[ Entity(Replies) ]", required = false)
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse getChannelMessageReplies(
-            @Field.Text(name = "Channel Message ID", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The message ID of the channel message'")}, options = {}) String channelMessageID,
-            @Field.Text(name = "Channel ID", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The channel ID of the Teams channel'")}, options = {}) String channelID,
-            @Field.Text(name = "Team ID", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The team ID of the Teams team'")}, options = {}) String teamID,
+            @Field.Text(name = "Channel Message ID", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The message ID of the channel message'")}) String channelMessageID,
+            @Field.Text(name = "Channel ID", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The channel ID of the Teams channel'")}) String channelID,
+            @Field.Text(name = "Team ID", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The team ID of the Teams team'")}) String teamID,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getChannelMessageReplies");
@@ -378,11 +601,21 @@ public class TeamsAPIsArea {
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNEL_MESSAGE_REPLIES_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
             return response;
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNEL_MESSAGE_REPLIES_REQUEST_FAILURE, 1L);
             logger.error("Error in getChannelMessageReplies for channelMessageID: {}, channelID: {}, teamID: {}", channelMessageID, channelID, teamID, cause);
-            throw cause;
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to retrieve channel message replies for messageID '" + channelMessageID + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -391,25 +624,36 @@ public class TeamsAPIsArea {
             name = "Get Channels of Team by Team ID",
             description = "Get a list of all channels for a given Team the user has access to",
             area = "Teams APIs",
-            type = CatalogRequest.Type.QUERY_SYSTEM)
+            type = CatalogRequest.Type.QUERY_SYSTEM, tool = true)
     @Field.Desc(name = "Channels", type = "[ Entity(Channel) ]", required = false)
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse getChannelsOfTeamByTeamID(
-            @Field.Text(name = "Team ID", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The team ID of the Teams team'")}, options = {}) String teamID,
+            @Field.Text(name = "Team ID", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The team ID of the Teams team'")}) String teamID,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
-
+        logger.info("TeamsAPIsArea.getChannelsOfTeamByTeamID() called with teamID={}, allowRetry={}", teamID, allowRetry);
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("getChannelsOfTeamByTeamID");
 
         try {
-            logger.info("TeamsAPIsArea.getChannelsOfTeamByTeamID() called with teamID={}, allowRetry={}", teamID, allowRetry);
             ExtensionResponse response = getChannelsOfTeamHelper.getChannelsOfTeamWithValidation(teamID, allowRetry);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNELS_BY_TEAM_ID_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
             return response;
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.GET_CHANNELS_BY_TEAM_ID_REQUEST_FAILURE, 1L);
             logger.error("Error in getChannelsOfTeamByTeamID for teamID: {}", teamID, cause);
-            throw cause;
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to retrieve channels for teamID '" + teamID + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -419,24 +663,24 @@ public class TeamsAPIsArea {
             description = "Sends a 1:1 chat message to a specified user in Microsoft Teams via Graph API." +
                     "If the chat does not exist, it creates a new 1:1 chat thread with the user.",
             area = "Teams APIs",
-            type = CatalogRequest.Type.CHANGE_SYSTEM)
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
     @Field.Text(name = "Status Code", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
-            @Attribute(name = "toolTip", value = "'HTTP response code from the Graph API'")}, options = {})
+            @Attribute(name = "toolTip", value = "'HTTP response code from the Graph API'")})
     @Field.Text(name = "Message Id", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
-            @Attribute(name = "toolTip", value = "'The unique ID of the message sent'")}, options = {})
+            @Attribute(name = "toolTip", value = "'The unique ID of the message sent'")})
     @Field.Text(name = "Chat Id", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
-            @Attribute(name = "toolTip", value = "'ID of the 1:1 chat used or created'")}, options = {})
+            @Attribute(name = "toolTip", value = "'ID of the 1:1 chat used or created'")})
     @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
-            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")}, options = {})
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse sendMessageToUser(
-            @Field.Text(name = "User Email", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"),
-                    @Attribute(name = "toolTip", value = "'Email ID of the Teams user to whom message is to be sent'")}, options = {}) String userEmail,
-            @Field.Text(name = "Message Content", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"),
-                    @Attribute(name = "toolTip", value = "'The content of the message to be sent'")}, options = {}) String messageContent,
+            @Field.Text(name = "User Email", attributes = {@Attribute(name = "visualWidth", value = "S"),
+                    @Attribute(name = "toolTip", value = "'Email ID of the Teams user to whom message is to be sent'")}) String userEmail,
+            @Field.Text(name = "Message Content", attributes = {@Attribute(name = "visualWidth", value = "S"),
+                    @Attribute(name = "toolTip", value = "'The content of the message to be sent'")}) String messageContent,
             @Field.Boolean(name = "Reuse ChatId", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
-                    @Attribute(name = "toolTip", value = "'Reuse existing chat if found, else create a new one'")}, options = {}) Boolean reuseChatId,
+                    @Attribute(name = "toolTip", value = "'Reuse existing chat if found, else create a new one'")}) Boolean reuseChatId,
             @Field.Boolean(name = "Log Conversation", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
-                    @Attribute(name = "toolTip", value = "'Whether to store chat ID in Krista memory for reuse'")}, options = {}) Boolean logConversation,
+                    @Attribute(name = "toolTip", value = "'Whether to store chat ID in Krista memory for reuse'")}) Boolean logConversation,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("sendMessageToUser");
@@ -448,11 +692,20 @@ public class TeamsAPIsArea {
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TO_USER_REQUEST_SUCCESS, 1L);
             operation.recordSuccess();
             return response;
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_MESSAGE_TO_USER_REQUEST_FAILURE, 1L);
             logger.error("Error in sendMessageToUser for user: {}", userEmail, cause);
-            throw cause;
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to send message to user  '" + userEmail + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -461,24 +714,24 @@ public class TeamsAPIsArea {
             name = "Send HTML Message to User",
             description = "Sends a 1:1 HTML chat message to a specified user in Microsoft Teams via Graph API.",
             area = "Teams APIs",
-            type = CatalogRequest.Type.CHANGE_SYSTEM)
-    @Field.Text(name = "Status Code", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'HTTP response code from the Graph API'")}, options = {})
-    @Field.Text(name = "Message Id", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The unique ID of the message sent'")}, options = {})
-    @Field.Text(name = "Chat Id", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'ID of the 1:1 chat used or created'")}, options = {})
-    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")}, options = {})
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
+    @Field.Text(name = "Status Code", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'HTTP response code from the Graph API'")})
+    @Field.Text(name = "Message Id", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'The unique ID of the message sent'")})
+    @Field.Text(name = "Chat Id", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'ID of the 1:1 chat used or created'")})
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse sendHTMLMessageToUser(
-            @Field.Text(name = "User Email", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Email ID of the Teams user to whom message is to be sent'")}, options = {}) String userEmail,
-            @Field(name = "Message Content", type = "RichText", required = true, attributes = {@Attribute(name = "visualWidth", value = "L"), @Attribute(name = "toolTip", value = "'HTML message content to send'")}, options = {}) String messageContent,
-            @Field.Boolean(name = "Reuse ChatId", required = true, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Reuse existing chat if found, else create a new one'")}, options = {}) Boolean reuseChatId,
-            @Field.Boolean(name = "Log Conversation", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Whether to store chat ID in Krista memory for reuse'")}, options = {}) Boolean logConversation,
+            @Field.Text(name = "User Email", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Email ID of the Teams user to whom message is to be sent'")}) String userEmail,
+            @Field(name = "Message Content", type = "RichText", attributes = {@Attribute(name = "visualWidth", value = "L"), @Attribute(name = "toolTip", value = "'HTML message content to send'")}) String messageContent,
+            @Field.Boolean(name = "Reuse ChatId", attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Reuse existing chat if found, else create a new one'")}) Boolean reuseChatId,
+            @Field.Boolean(name = "Log Conversation", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"), @Attribute(name = "toolTip", value = "'Whether to store chat ID in Krista memory for reuse'")}) Boolean logConversation,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
+        int messageLength = messageContent != null ? messageContent.length() : 0;
+        logger.info("TeamsAPIsArea.sendHTMLMessageToUser() called with userEmail: {}, allowRetry: {}, HTML message length: {} characters",
+                userEmail, allowRetry, messageLength);
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("sendHTMLMessageToUser");
 
         try {
-            int messageLength = messageContent != null ? messageContent.length() : 0;
-            logger.info("TeamsAPIsArea.sendHTMLMessageToUser() called with userEmail: {}, allowRetry: {}, HTML message length: {} characters",
-                userEmail, allowRetry, messageLength);
             ExtensionResponse response = sendHTMLMessageToUserValidationHelper.sendHTMLMessageToUserWithEmailValidation(
                     userEmail, messageContent, reuseChatId, logConversation, allowRetry);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TO_USER_REQUEST_SUCCESS, 1L);
@@ -487,13 +740,21 @@ public class TeamsAPIsArea {
         } catch (GraphServiceException gse) {
             return GraphServiceExceptionHandler.handleMessageTooLargeError(gse, messageContent, "user '" + userEmail + "'",
                     TelemetryConstants.SEND_HTML_MESSAGE_TO_USER_REQUEST_FAILURE, operation, telemetryMetrics);
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TO_USER_REQUEST_FAILURE, 1L);
-            int messageLength = messageContent != null ? messageContent.length() : 0;
             logger.error("Error in sendHTMLMessageToUser for user: {}, HTML message length: {} characters",
-                userEmail, messageLength, cause);
-            throw cause;
+                    userEmail, messageLength, cause);
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to send html message to user  '" + userEmail + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
@@ -502,12 +763,14 @@ public class TeamsAPIsArea {
             name = "Send HTML message to teams channel",
             description = "Send HTML message to teams channel",
             area = "Teams APIs",
-            type = CatalogRequest.Type.CHANGE_SYSTEM)
-    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {})
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
+    @Field.Boolean(name = "Is Message Delivered", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")})
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
     public ExtensionResponse sendHTMLMessageToTeamsChannel(
-            @Field.Text(name = "Team Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String teamName,
-            @Field.Text(name = "Channel Name", required = true, attributes = {@Attribute(name = "visualWidth", value = "S")}, options = {}) String channelName,
-            @Field(name = "Message", type = "RichText", required = true, attributes = {@Attribute(name = "visualWidth", value = "L")}, options = {}) String message,
+            @Field.Text(name = "Team Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String teamName,
+            @Field.Text(name = "Channel Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String channelName,
+            @Field(name = "Message", type = "RichText", attributes = {@Attribute(name = "visualWidth", value = "L")}) String message,
             @Field.Boolean(name = "Allow Retry", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")}) Boolean allowRetry) {
 
         TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("sendHTMLMessageToTeamsChannel");
@@ -515,7 +778,7 @@ public class TeamsAPIsArea {
         try {
             int messageLength = message != null ? message.length() : 0;
             logger.info("TeamsAPIsArea.sendHTMLMessageToTeamsChannel() called with teamName: {}, channelName: {}, allowRetry: {}, HTML message length: {} characters",
-                teamName, channelName, allowRetry, messageLength);
+                    teamName, channelName, allowRetry, messageLength);
             ExtensionResponse response = sendHTMLMessageToChannelValidationHelper.sendHTMLMessageToChannelWithValidation(
                     teamName, channelName, message, allowRetry);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TO_CHANNEL_REQUEST_SUCCESS, 1L);
@@ -524,38 +787,65 @@ public class TeamsAPIsArea {
         } catch (GraphServiceException gse) {
             return GraphServiceExceptionHandler.handleMessageTooLargeError(gse, message, "channel '" + channelName + "' in team '" + teamName + "'",
                     TelemetryConstants.SEND_HTML_MESSAGE_TO_CHANNEL_REQUEST_FAILURE, operation, telemetryMetrics);
+        } catch (MustAuthorizeException cause) {
+            throw cause;
         } catch (Exception cause) {
             operation.recordFailure(cause);
             telemetryMetrics.incrementCounter(TelemetryConstants.SEND_HTML_MESSAGE_TO_CHANNEL_REQUEST_FAILURE, 1L);
             int messageLength = message != null ? message.length() : 0;
             logger.error("Error in sendHTMLMessageToTeamsChannel for team: {}, channel: {}, HTML message length: {} characters",
-                teamName, channelName, messageLength, cause);
-            throw cause;
+                    teamName, channelName, messageLength, cause);
+
+            ExtensionResponse.Error error = new ErrorBuilder()
+                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
+                    .errorMessage("Failed to send HTML message to channel '" + channelName + "' in team '" + teamName + "': " + cause.getMessage())
+                    .build();
+
+            return new ExtensionResponseBuilder()
+                    .failure(error)
+                    .build();
         }
     }
 
+    @CatalogRequest(
+            id = "localDomainRequest_b3e7c2a1-9f4d-4e8c-b1a2-7d6e5f4c3b2a",
+            name = "Create Channel",
+            description = "Creates a new channel in a Microsoft Teams team. Returns switch OFF if the team is not found or the channel already exists.",
+            area = "Teams APIs",
+            type = CatalogRequest.Type.CHANGE_SYSTEM, tool = true)
+    @Field.Boolean(name = "Is Channel Created", required = false, attributes = {@Attribute(name = "visualWidth", value = "S")})
+    @Field.Text(name = "Response Message", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+            @Attribute(name = "toolTip", value = "'Message indicating success or details in case of failure'")})
+    public ExtensionResponse createChannel(
+            @Field.Text(name = "Team Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String teamName,
+            @Field.Text(name = "Channel Name", attributes = {@Attribute(name = "visualWidth", value = "S")}) String channelName,
+            @Field.PickOne(name = "Channel Type", values = {"Standard", "Private"}) String channelType,
+            @Field.Text(name = "Members", required = false, attributes = {@Attribute(name = "visualWidth", value = "S"),
+                    @Attribute(name = "toolTip", value = "'Comma-separated member emails (used for Private channels)'")}) String members) {
 
-    /**
-     * Helper method to retrieve channels directly from the service.
-     *
-     * @param teamName The name of the team
-     * @return List of channels for the team
-     */
-    private List<Channel> getChannelsDirectly(String teamName) {
-        logger.debug("Calling Teams API: teamService.getJoinedTeams with teamName={}", teamName);
-        List<Team> joinedTeams = teamService.getJoinedTeams(teamName);
-        logger.debug("Teams API response: received {} joined teams", joinedTeams != null ? joinedTeams.size() : 0);
+        TelemetryHelper.TelemetryOperation operation = telemetryHelper.startOperation("createChannel");
 
-        if (joinedTeams.isEmpty()) {
-            logger.info("No team found with name: {}", teamName);
-            return Collections.emptyList();
+        try {
+            logger.info("createChannel() called with teamName: {}, channelName: {}, channelType: {}", teamName, channelName, channelType);
+            Map<String, Object> result = channelService.createChannel(teamName, channelName, channelType, members);
+            boolean isCreated = Boolean.TRUE.equals(result.get("isCreated"));
+            String responseMessage = (String) result.get("message");
+            operation.recordSuccess();
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Is Channel Created", isCreated,
+                            "Response Message", responseMessage))
+                    .build();
+        } catch (MustAuthorizeException cause) {
+            throw cause;
+        } catch (Exception cause) {
+            operation.recordFailure(cause);
+            logger.error("Error in createChannel for team: {}, channel: {}", teamName, channelName, cause);
+            return new ExtensionResponseBuilder()
+                    .success(Map.of(
+                            "Is Channel Created", false,
+                            "Response Message", "Failed to create channel '" + channelName + "': " + cause.getMessage()))
+                    .build();
         }
-
-        logger.debug("Calling Teams API: channelService.getChannelsOfTeam with teamId={}", joinedTeams.get(0).iD);
-        List<Channel> channels = channelService.getChannelsOfTeam(joinedTeams.get(0).iD, null);
-        logger.debug("Teams API response: received {} channels for team {}",
-                channels != null ? channels.size() : 0, teamName);
-
-        return channels;
     }
 }

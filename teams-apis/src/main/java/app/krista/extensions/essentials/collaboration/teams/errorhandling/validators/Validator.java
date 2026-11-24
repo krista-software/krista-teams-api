@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -39,10 +39,7 @@ public interface Validator {
         GROUP_NAME,
         CHANNEL_TEAM_LINK,
 
-        CHANNEL_ID_FOR_REPLIES,
-        TEAM_ID_FOR_REPLIES,
         CHANNEL_MESSAGE_ID_FOR_REPLIES,
-        TEAM_ID_FOR_CHANNELS,
 
         // Send Message to User validation resources
         USER_EMAIL_FOR_SEND_MESSAGE,

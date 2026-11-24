@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.catalog;
@@ -369,8 +369,20 @@ public class TeamsAPIsAreaSubCatalogRequests {
             LOGGER.info("Validation passed, retrieving messages");
             List<ChannelMessage> result = chatService.getGroupChats(chatID, fromDate, toDate);
 
+            if (result.isEmpty()) {
+                String responseMessage = "No group chat messages found in the provided date range for chatID: " + chatID;
+                return new ExtensionResponseBuilder()
+                        .success(Map.of(
+                                "Group Chat Messages", new java.util.ArrayList<>(),
+                                "Response Message", responseMessage))
+                        .build();
+            }
+
+            String responseMessage = "Successfully retrieved " + result.size() + " group chat message(s) for chatID: " + chatID;
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Group Chat Messages", result))
+                    .success(Map.of(
+                            "Group Chat Messages", result,
+                            "Response Message", responseMessage))
                     .build();
         } catch (Exception cause) {
 
@@ -640,6 +652,7 @@ public class TeamsAPIsAreaSubCatalogRequests {
             type = CatalogRequest.Type.CHANGE_SYSTEM
     )
     @Field.Desc(name = "Replies List", type = "[ Entity ]", required = false)
+    @Field.Text(name = "Response Message", required = false)
     @SuppressWarnings("unchecked")
     public ExtensionResponse handleChannelIdValidationGetChannelMessageReplies(
             @Field.Desc(name = "inputMap", type = "{stateId: Text, Channel Message ID: Text, Channel ID: Text, Team ID: Text}") Map<String, Object> map) {
@@ -662,8 +675,8 @@ public class TeamsAPIsAreaSubCatalogRequests {
         List<ValidationOrchestrator.ValidationResult> validationResults = validationOrchestrator.validate(
                 Map.of(
                         Validator.ValidationResource.CHANNEL_MESSAGE_ID_FOR_REPLIES, channelMessageId != null ? channelMessageId : "",
-                        Validator.ValidationResource.CHANNEL_ID_FOR_REPLIES, channelID != null ? channelID : "",
-                        Validator.ValidationResource.TEAM_ID_FOR_REPLIES, teamID != null ? teamID : ""
+                        Validator.ValidationResource.CHANNEL_ID, channelID != null ? channelID : "",
+                        Validator.ValidationResource.TEAM_ID, teamID != null ? teamID : ""
                 )
         );
 
@@ -733,6 +746,7 @@ public class TeamsAPIsAreaSubCatalogRequests {
             type = CatalogRequest.Type.CHANGE_SYSTEM
     )
     @Field.Desc(name = "Channels", type = "[ Entity ]", required = false)
+    @Field.Text(name = "Response Message", required = false)
     @SuppressWarnings("unchecked")
     public ExtensionResponse handleTeamIdValidationGetChannelsOfTeam(
             @Field.Desc(name = "inputMap", type = "{stateId: Text, Team ID: Text}") Map<String, Object> map) {
@@ -747,7 +761,7 @@ public class TeamsAPIsAreaSubCatalogRequests {
 
         // Validate the re-entered data - validate Team Id
         List<ValidationOrchestrator.ValidationResult> validationResults = validationOrchestrator.validate(
-                Map.of(Validator.ValidationResource.TEAM_ID_FOR_CHANNELS, teamId != null ? teamId : "")
+                Map.of(Validator.ValidationResource.TEAM_ID, teamId != null ? teamId : "")
         );
 
         LOGGER.debug("handleTeamIdValidationGetChannelsOfTeam() - Validation results: {} errors", validationResults.size());
@@ -1128,6 +1142,7 @@ public class TeamsAPIsAreaSubCatalogRequests {
             description = "Handle team name, channel name, and HTML message content validation re-entry for Send HTML Message to Channel",
             type = CatalogRequest.Type.CHANGE_SYSTEM)
     @Field.Boolean(name = "Is Message Delivered", required = false)
+    @Field.Text(name = "Response Message", required = false)
     @SuppressWarnings("unchecked")
     public ExtensionResponse handleSendHTMLMessageToChannel(
             @Field.Desc(name = "inputMap", type = "{stateId: Text, Team Name: Text, Channel Name: Text, HTML Message Content: Text}") Map<String, Object> map) {
@@ -1152,8 +1167,11 @@ public class TeamsAPIsAreaSubCatalogRequests {
         if (!validationResults.isEmpty()) {
             LOGGER.info("Re-entered team name, channel name, and/or HTML message content validation failed with {} errors. No more retries allowed.", validationResults.size());
 
+            String errorMessage = "Validation failed for team '" + teamName + "' and channel '" + channelName + "' after retry";
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Is Message Delivered", false))
+                    .success(Map.of(
+                            "Is Message Delivered", false,
+                            "Response Message", errorMessage))
                     .build();
         }
 
@@ -1174,8 +1192,11 @@ public class TeamsAPIsAreaSubCatalogRequests {
         } catch (Exception cause) {
             LOGGER.error("Error in handleSendHTMLMessageToChannel for team: {}, channel: {}", teamName, channelName, cause);
 
+            String errorMessage = "Error sending HTML message to channel '" + channelName + "' in team '" + teamName + "': " + cause.getMessage();
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Is Message Delivered", false))
+                    .success(Map.of(
+                            "Is Message Delivered", false,
+                            "Response Message", errorMessage))
                     .build();
         }
     }

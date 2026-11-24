@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -25,7 +25,7 @@ import app.krista.extensions.essentials.collaboration.teams.errorhandling.consta
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.TeamsResources;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.TeamIdForChannelsValidator;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.TeamIdValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ValidationOrchestrator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.Validator;
 import app.krista.extensions.essentials.collaboration.teams.service.ChannelService;
@@ -76,8 +76,8 @@ public class GetChannelsOfTeamHelper {
     private void registerValidators() {
         try {
             // Register Team ID validator for channels
-            TeamIdForChannelsValidator teamIdForChannelsValidator = new TeamIdForChannelsValidator(teamService);
-            validationOrchestrator.registerValidator(Validator.ValidationResource.TEAM_ID_FOR_CHANNELS, teamIdForChannelsValidator);
+            TeamIdValidator teamIdValidator = new TeamIdValidator(this.teamService);
+            validationOrchestrator.registerValidator(Validator.ValidationResource.TEAM_ID, teamIdValidator);
             LOGGER.info("Registered TeamIdForChannelsValidator for TEAM_ID_FOR_CHANNELS");
 
             LOGGER.info("GetChannelsOfTeamHelper.registerValidators() completed successfully");
@@ -87,12 +87,11 @@ public class GetChannelsOfTeamHelper {
     }
 
     public ExtensionResponse getChannelsOfTeamWithValidation(String teamId, Boolean allowRetry) {
-        try {
             LOGGER.info("GetChannelsOfTeamHelper.getChannelsOfTeamWithValidation() called with teamId: {}, allowRetry: {}", teamId, allowRetry);
 
             // Validate input parameters - validate Team Id
             List<ValidationOrchestrator.ValidationResult> validationResults = validationOrchestrator.validate(
-                    Map.of(Validator.ValidationResource.TEAM_ID_FOR_CHANNELS, teamId != null ? teamId : "")
+                    Map.of(Validator.ValidationResource.TEAM_ID, teamId != null ? teamId : "")
             );
 
             // If validation fails, handle it
@@ -108,24 +107,23 @@ public class GetChannelsOfTeamHelper {
             if (result == null || result.isEmpty()) {
                 LOGGER.warn("No channels found for team ID: {}", teamId);
 
+                String responseMessage = "No channels found for team ID: " + teamId;
                 return new ExtensionResponseBuilder()
-                        .success(Map.of("Channels", Collections.emptyList()))
+                        .success(Map.of(
+                                "Channels", Collections.emptyList(),
+                                "Response Message", responseMessage))
                         .build();
             }
 
             LOGGER.info("Successfully retrieved {} channels for team: {}", result.size(), teamId);
 
+            String responseMessage = "Successfully retrieved " + result.size() + " channel(s) for team ID: " + teamId;
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Channels", result))
+                    .success(Map.of(
+                            "Channels", result,
+                            "Response Message", responseMessage))
                     .build();
 
-        } catch (Exception cause) {
-            LOGGER.error("Error in getChannelsOfTeamWithValidation for teamId: {}", teamId, cause);
-
-            return new ExtensionResponseBuilder()
-                    .success(Map.of("Channels", "Failed to retrieve channels: " + cause.getMessage()))
-                    .build();
-        }
     }
 
     private ExtensionResponse handleValidationFailure(List<ValidationOrchestrator.ValidationResult> validationResults,

@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -81,7 +81,6 @@ public class GetGroupChatByNameHelper {
     }
 
     public ExtensionResponse getGroupChatByNameWithValidation(String groupName, Boolean allowRetry) {
-        try {
             LOGGER.info("GetGroupChatByNameHelper.getGroupChatByNameWithValidation() called with groupName: {}, allowRetry: {}", groupName, allowRetry);
 
             // Validate input parameters
@@ -101,22 +100,22 @@ public class GetGroupChatByNameHelper {
 
             if (result == null) {
                 LOGGER.warn("No group chat found with name: {}", groupName);
-
+                String responseMessage = "No group chat found with the specified name: " + groupName;
                 return new ExtensionResponseBuilder()
-                        .success(Map.of("Group", "No group chat found with the specified name"), null, null)
+                        .success(Map.of(
+                                "Group", "",
+                                "Response Message", responseMessage))
                         .build();
             }
 
             LOGGER.info("Successfully retrieved group chat: {}", result.topic);
-
+            String responseMessage = "Successfully retrieved group chat: " + result.topic;
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Group", result), null, null)
+                    .success(Map.of(
+                            "Group", result,
+                            "Response Message", responseMessage))
                     .build();
 
-        } catch (Exception cause) {
-            LOGGER.error("Error occurred while retrieving group chat by name: {}", cause.getMessage(), cause);
-            return generateErrorResponse("Error occurred while retrieving group chat by name");
-        }
     }
 
     private ExtensionResponse handleValidationFailure(List<ValidationOrchestrator.ValidationResult> validationResults,
@@ -153,15 +152,4 @@ public class GetGroupChatByNameHelper {
                 validationResults, null, Map.of());
     }
 
-    private ExtensionResponse generateErrorResponse(String errorMessage) {
-        LOGGER.error("Generating error response: {}", errorMessage);
-        ExtensionResponse.Error error = new ErrorBuilder()
-                .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
-                .errorMessage(errorMessage)
-                .build();
-
-        return new ExtensionResponseBuilder()
-                .failure(error)
-                .build();
-    }
 }

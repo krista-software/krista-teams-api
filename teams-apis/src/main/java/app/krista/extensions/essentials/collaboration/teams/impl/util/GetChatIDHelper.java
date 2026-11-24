@@ -13,24 +13,22 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
 
-import app.krista.extension.executor.ErrorBuilder;
 import app.krista.extension.executor.ExtensionResponse;
 import app.krista.extension.executor.ExtensionResponseBuilder;
 import app.krista.extensions.essentials.collaboration.teams.catalog.entities.ChannelMessage;
-import app.krista.extensions.essentials.collaboration.teams.catalog.entities.ChannelMessage;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.SubCatalogConstants;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.TeamsResources;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChatIdValidator;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.DateRangeValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ValidationOrchestrator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.Validator;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ChatIdValidator;
-
 import app.krista.extensions.essentials.collaboration.teams.service.ChatService;
 import org.jvnet.hk2.annotations.Service;
 import org.slf4j.Logger;
@@ -38,13 +36,9 @@ import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.DateRangeValidator;
-import app.krista.extensions.essentials.collaboration.teams.impl.util.Constants;
 
 @Service
 public class GetChatIDHelper {
@@ -120,34 +114,26 @@ public class GetChatIDHelper {
             LOGGER.warn("Validation failed with {} errors", validationResults.size());
             return handleValidationFailure(validationResults, chatID, fromDate, toDate, allowRetry);
         }
+        // Retrieve messages using the chat service
+        List<ChannelMessage> result = chatService.getGroupChats(chatID, fromDate, toDate);
 
-        try {
-            // Retrieve messages using the chat service
-            List<ChannelMessage> result = chatService.getGroupChats(chatID, fromDate, toDate);
-
-            if (result.isEmpty()) {
-                LOGGER.info("No group chat messages found in the provided date range for chatID: {}", chatID);
-                return new ExtensionResponseBuilder()
-                        .success(Map.of("Group Chats", "Group chat messages are not present in the provided date range"))
-                        .build();
-            }
-
-            LOGGER.info("Successfully processed group chat messages. Retrieved {} messages", result.size());
+        if (result.isEmpty()) {
+            LOGGER.info("No group chat messages found in the provided date range for chatID: {}", chatID);
+            String responseMessage = "No group chat messages found in the provided date range for chatID: " + chatID;
             return new ExtensionResponseBuilder()
-                    .success(Map.of("Group Chat Messages", result))
-                    .build();
-        } catch (Exception cause) {
-            LOGGER.error("Failed to fetch group chat messages for chatID: {}", chatID, cause);
-
-            ExtensionResponse.Error error = new ErrorBuilder()
-                    .exceptionType(ExtensionResponse.Error.ExceptionType.LOGIC_ERROR)
-                    .errorMessage("Failed to fetch group chat messages: " + cause.getMessage())
-                    .build();
-
-            return new ExtensionResponseBuilder()
-                    .failure(error)
+                    .success(Map.of(
+                            "Group Chat Messages", new ArrayList<>(),
+                            "Response Message", responseMessage))
                     .build();
         }
+
+        LOGGER.info("Successfully processed group chat messages. Retrieved {} messages", result.size());
+        String responseMessage = "Successfully retrieved " + result.size() + " group chat message(s) for chatID: " + chatID;
+        return new ExtensionResponseBuilder()
+                .success(Map.of(
+                        "Group Chat Messages", result,
+                        "Response Message", responseMessage))
+                .build();
     }
 
     private ExtensionResponse handleValidationFailure(List<ValidationOrchestrator.ValidationResult> validationResults,

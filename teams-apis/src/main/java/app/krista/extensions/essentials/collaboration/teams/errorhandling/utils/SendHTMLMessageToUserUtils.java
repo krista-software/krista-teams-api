@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.utils;
@@ -57,8 +57,8 @@ public class SendHTMLMessageToUserUtils {
      */
     public Map<String, String> sendHTMLMessageToUserWithDetails(String userEmail, String messageContent,
                                                                 boolean reuseChatId, boolean logConversation) {
-        Map<String, String> result = new HashMap<>();
-        try {
+        Map<String, String> result;
+
             // Call ChatService with isHtml=true
             result = chatService.sendMessageToUser(userEmail, messageContent, reuseChatId, logConversation, true);
 
@@ -66,7 +66,7 @@ public class SendHTMLMessageToUserUtils {
             if (result == null) {
                 logger.warn("ChatService returned null result for user: {}", userEmail);
                 result = new HashMap<>();
-                result.put("Status Code", "500");
+                result.put("Status Code", result.get("Status code"));
                 result.put("Message Id", "");
                 result.put("Chat Id", "");
                 result.put("Response Message", "Error: Service returned null response");
@@ -74,30 +74,6 @@ public class SendHTMLMessageToUserUtils {
 
             return result;
 
-        } catch (Exception serviceException) {
-            logger.error("ChatService.sendMessageToUser() failed for user: {}", userEmail, serviceException);
-
-            // Check if it's a permission error
-            if (serviceException.getMessage() != null &&
-                    (serviceException.getMessage().contains("Authorization_RequestDenied") ||
-                            serviceException.getMessage().contains("Insufficient privileges") ||
-                            serviceException.getMessage().contains("403"))) {
-
-                logger.warn("Permission error detected for user: {}, providing detailed error message", userEmail);
-                result.put("Status Code", "403");
-                result.put("Message Id", "");
-                result.put("Chat Id", "");
-                result.put("Response Message", "Error: Insufficient permissions to send HTML message. The application needs 'User.Read.All' or 'Directory.Read.All' and 'Chat.Create' permissions in Microsoft Graph API. Please contact your administrator to grant these permissions.");
-                return result;
-            } else {
-                // Generic service error
-                result.put("Status Code", "500");
-                result.put("Message Id", "");
-                result.put("Chat Id", "");
-                result.put("Response Message", "Error: Failed to send HTML message - " + serviceException.getMessage());
-                return result;
-            }
-        }
     }
 }
 

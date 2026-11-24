@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.utils;
@@ -30,13 +30,13 @@ import org.slf4j.LoggerFactory;
 /**
  * Utility class for handling GraphServiceException errors related to Microsoft Teams API.
  * Provides centralized error detection and user-friendly error message generation
- * for common Teams API errors, particularly message-too-large errors.
+ * for common Teams API errors, including message-too-large errors and permission errors.
  *
- * <p>This class handles the detection of message size limit errors from Microsoft Graph API
- * and provides consistent error handling across all Teams API operations.</p>
+ * <p>This class handles the detection of message size limit errors and permission errors (403)
+ * from Microsoft Graph API and provides consistent error handling across all Teams API operations.</p>
  *
  * @author Krista Teams Extension
- * @version 2.0.7
+ * @version 2.0.9
  * @since 2.0.7
  */
 public final class GraphServiceExceptionHandler {
@@ -90,55 +90,10 @@ public final class GraphServiceExceptionHandler {
     }
 
     /**
-     * Handles GraphServiceException for message-too-large errors and throws an exception.
-     * This method is designed for catalog request methods that return Boolean.
-     *
-     * <p>Checks if the exception is due to message size exceeding Teams API limits
-     * and throws a user-friendly IllegalArgumentException. For other errors, throws
-     * the original GraphServiceException.</p>
-     *
-     * @param gse The GraphServiceException to handle
-     * @param message The message content that was being sent
-     * @param targetDescription Description of the target (e.g., "user 'email@example.com'", "group 'GroupName'")
-     * @param telemetryConstant The telemetry constant for failure tracking
-     * @param operation The telemetry operation to record failure
-     * @param telemetryMetrics The telemetry metrics instance
-     * @throws IllegalArgumentException if message is too large with user-friendly error message
-     * @throws GraphServiceException if the error is not related to message size
-     */
-    public static void handleMessageTooLargeErrorAndThrow(
-            GraphServiceException gse,
-            String message,
-            String targetDescription,
-            String telemetryConstant,
-            TelemetryHelper.TelemetryOperation operation,
-            TelemetryMetrics telemetryMetrics) {
-
-        operation.recordFailure(gse);
-        telemetryMetrics.incrementCounter(telemetryConstant, 1L);
-
-        int messageLength = message != null ? message.length() : 0;
-        LOGGER.error("GraphServiceException for {}, HTML message length: {} characters",
-                targetDescription, messageLength, gse);
-
-        // Check if error is due to message being too long
-        if (isMessageTooLargeError(gse)) {
-            String errorMessage = createMessageTooLargeErrorMessage(targetDescription, messageLength);
-            LOGGER.warn("Message too large for Teams API: {} characters (limit: ~{})",
-                    messageLength, TEAMS_API_MESSAGE_LIMIT);
-
-            throw new IllegalArgumentException(errorMessage, gse);
-        }
-
-        // For other GraphServiceExceptions, throw as-is
-        throw gse;
-    }
-
-    /**
-     * Handles GraphServiceException for message-too-large errors and returns ExtensionResponse.
+     * Handles GraphServiceException for message-too-large and permission errors, and returns ExtensionResponse.
      * This method is designed for catalog request methods that return ExtensionResponse.
      *
-     * <p>Checks if the exception is due to message size exceeding Teams API limits
+     * <p>Checks if the exception is due to message size exceeding Teams API limits or permission errors (403),
      * and returns a user-friendly error response. For other errors, throws
      * the original GraphServiceException.</p>
      *
@@ -148,8 +103,8 @@ public final class GraphServiceExceptionHandler {
      * @param telemetryConstant The telemetry constant for failure tracking
      * @param operation The telemetry operation to record failure
      * @param telemetryMetrics The telemetry metrics instance
-     * @return ExtensionResponse with user-friendly error message if message is too large
-     * @throws GraphServiceException if the error is not related to message size
+     * @return ExtensionResponse with user-friendly error message if message is too large or permission error
+     * @throws GraphServiceException if the error is not related to message size or permissions
      */
     public static ExtensionResponse handleMessageTooLargeError(
             GraphServiceException gse,
@@ -181,7 +136,6 @@ public final class GraphServiceExceptionHandler {
                     .failure(error)
                     .build();
         }
-
         // For other GraphServiceExceptions, throw as-is
         throw gse;
     }

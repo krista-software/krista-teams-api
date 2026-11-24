@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.utils;
@@ -158,7 +158,7 @@ class SendHTMLMessageToUserUtilsTest {
     class PermissionErrorHandlingTests {
 
         @Test
-        @DisplayName("Should handle Authorization_RequestDenied error")
+        @DisplayName("Should propagate Authorization_RequestDenied error from ChatService")
         void testAuthorizationRequestDeniedError() {
             // Arrange
             String userEmail = "user@example.com";
@@ -167,23 +167,19 @@ class SendHTMLMessageToUserUtilsTest {
             when(chatService.sendMessageToUser(anyString(), anyString(), anyBoolean(), anyBoolean(), eq(true)))
                     .thenThrow(new RuntimeException("Authorization_RequestDenied: Insufficient privileges"));
 
-            // Act
-            Map<String, String> result = utils.sendHTMLMessageToUserWithDetails(
-                    userEmail, messageContent, true, true);
+            // Act & Assert
+            // The utility class now propagates exceptions to be handled at a higher level
+            // (in SendHTMLMessageToUserValidationHelper or ChatService)
+            assertThrows(RuntimeException.class, () -> {
+                utils.sendHTMLMessageToUserWithDetails(userEmail, messageContent, true, true);
+            });
 
-            // Assert
-            assertNotNull(result);
-            assertEquals("403", result.get("Status Code"));
-            assertEquals("", result.get("Message Id"));
-            assertEquals("", result.get("Chat Id"));
-            assertTrue(result.get("Response Message").contains("Insufficient permissions"));
-            assertTrue(result.get("Response Message").contains("HTML message"));
-            assertTrue(result.get("Response Message").contains("User.Read.All"));
-            assertTrue(result.get("Response Message").contains("Chat.Create"));
+            verify(chatService, times(1)).sendMessageToUser(
+                    userEmail, messageContent, true, true, true);
         }
 
         @Test
-        @DisplayName("Should handle 403 Forbidden error")
+        @DisplayName("Should propagate 403 Forbidden error from ChatService")
         void testForbiddenError() {
             // Arrange
             String userEmail = "user@example.com";
@@ -192,19 +188,18 @@ class SendHTMLMessageToUserUtilsTest {
             when(chatService.sendMessageToUser(anyString(), anyString(), anyBoolean(), anyBoolean(), eq(true)))
                     .thenThrow(new RuntimeException("403 Forbidden: Access denied"));
 
-            // Act
-            Map<String, String> result = utils.sendHTMLMessageToUserWithDetails(
-                    userEmail, messageContent, true, true);
+            // Act & Assert
+            // The utility class now propagates exceptions to be handled at a higher level
+            assertThrows(RuntimeException.class, () -> {
+                utils.sendHTMLMessageToUserWithDetails(userEmail, messageContent, true, true);
+            });
 
-            // Assert
-            assertNotNull(result);
-            assertEquals("403", result.get("Status Code"));
-            assertTrue(result.get("Response Message").contains("Insufficient permissions"));
-            assertTrue(result.get("Response Message").contains("HTML message"));
+            verify(chatService, times(1)).sendMessageToUser(
+                    userEmail, messageContent, true, true, true);
         }
 
         @Test
-        @DisplayName("Should handle Insufficient privileges error")
+        @DisplayName("Should propagate Insufficient privileges error from ChatService")
         void testInsufficientPrivilegesError() {
             // Arrange
             String userEmail = "user@example.com";
@@ -213,15 +208,14 @@ class SendHTMLMessageToUserUtilsTest {
             when(chatService.sendMessageToUser(anyString(), anyString(), anyBoolean(), anyBoolean(), eq(true)))
                     .thenThrow(new RuntimeException("Insufficient privileges to complete the operation"));
 
-            // Act
-            Map<String, String> result = utils.sendHTMLMessageToUserWithDetails(
-                    userEmail, messageContent, true, true);
+            // Act & Assert
+            // The utility class now propagates exceptions to be handled at a higher level
+            assertThrows(RuntimeException.class, () -> {
+                utils.sendHTMLMessageToUserWithDetails(userEmail, messageContent, true, true);
+            });
 
-            // Assert
-            assertNotNull(result);
-            assertEquals("403", result.get("Status Code"));
-            assertTrue(result.get("Response Message").contains("Insufficient permissions"));
-            assertTrue(result.get("Response Message").contains("administrator"));
+            verify(chatService, times(1)).sendMessageToUser(
+                    userEmail, messageContent, true, true, true);
         }
     }
 
@@ -230,7 +224,7 @@ class SendHTMLMessageToUserUtilsTest {
     class GenericErrorHandlingTests {
 
         @Test
-        @DisplayName("Should handle generic service exception")
+        @DisplayName("Should propagate generic service exception from ChatService")
         void testGenericServiceException() {
             // Arrange
             String userEmail = "user@example.com";
@@ -239,21 +233,19 @@ class SendHTMLMessageToUserUtilsTest {
             when(chatService.sendMessageToUser(anyString(), anyString(), anyBoolean(), anyBoolean(), eq(true)))
                     .thenThrow(new RuntimeException("Network error occurred"));
 
-            // Act
-            Map<String, String> result = utils.sendHTMLMessageToUserWithDetails(
-                    userEmail, messageContent, true, true);
+            // Act & Assert
+            // The utility class now propagates exceptions to be handled at a higher level
+            RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+                utils.sendHTMLMessageToUserWithDetails(userEmail, messageContent, true, true);
+            });
 
-            // Assert
-            assertNotNull(result);
-            assertEquals("500", result.get("Status Code"));
-            assertEquals("", result.get("Message Id"));
-            assertEquals("", result.get("Chat Id"));
-            assertTrue(result.get("Response Message").contains("Failed to send HTML message"));
-            assertTrue(result.get("Response Message").contains("Network error occurred"));
+            assertEquals("Network error occurred", exception.getMessage());
+            verify(chatService, times(1)).sendMessageToUser(
+                    userEmail, messageContent, true, true, true);
         }
 
         @Test
-        @DisplayName("Should handle null pointer exception")
+        @DisplayName("Should propagate null pointer exception from ChatService")
         void testNullPointerException() {
             // Arrange
             String userEmail = "user@example.com";
@@ -262,18 +254,19 @@ class SendHTMLMessageToUserUtilsTest {
             when(chatService.sendMessageToUser(anyString(), anyString(), anyBoolean(), anyBoolean(), eq(true)))
                     .thenThrow(new NullPointerException("Null value encountered"));
 
-            // Act
-            Map<String, String> result = utils.sendHTMLMessageToUserWithDetails(
-                    userEmail, messageContent, true, true);
+            // Act & Assert
+            // The utility class now propagates exceptions to be handled at a higher level
+            NullPointerException exception = assertThrows(NullPointerException.class, () -> {
+                utils.sendHTMLMessageToUserWithDetails(userEmail, messageContent, true, true);
+            });
 
-            // Assert
-            assertNotNull(result);
-            assertEquals("500", result.get("Status Code"));
-            assertTrue(result.get("Response Message").contains("Failed to send HTML message"));
+            assertEquals("Null value encountered", exception.getMessage());
+            verify(chatService, times(1)).sendMessageToUser(
+                    userEmail, messageContent, true, true, true);
         }
 
         @Test
-        @DisplayName("Should handle exception with null message")
+        @DisplayName("Should propagate exception with null message from ChatService")
         void testExceptionWithNullMessage() {
             // Arrange
             String userEmail = "user@example.com";
@@ -282,14 +275,15 @@ class SendHTMLMessageToUserUtilsTest {
             when(chatService.sendMessageToUser(anyString(), anyString(), anyBoolean(), anyBoolean(), eq(true)))
                     .thenThrow(new RuntimeException((String) null));
 
-            // Act
-            Map<String, String> result = utils.sendHTMLMessageToUserWithDetails(
-                    userEmail, messageContent, true, true);
+            // Act & Assert
+            // The utility class now propagates exceptions to be handled at a higher level
+            RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+                utils.sendHTMLMessageToUserWithDetails(userEmail, messageContent, true, true);
+            });
 
-            // Assert
-            assertNotNull(result);
-            assertEquals("500", result.get("Status Code"));
-            assertTrue(result.get("Response Message").contains("Failed to send HTML message"));
+            assertNull(exception.getMessage());
+            verify(chatService, times(1)).sendMessageToUser(
+                    userEmail, messageContent, true, true, true);
         }
     }
 

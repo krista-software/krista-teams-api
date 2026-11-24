@@ -8,6 +8,32 @@ This is a simple query operation with no input parameters required. It returns a
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Chat.ReadBasic` or `Chat.Read` or `Chat.ReadWrite` | Access chat information and list chats | **REQUIRED** |
+| `ChatMember.Read` | Read chat member information | **OPTIONAL** |
+
+> **Important**: The `Chat.ReadBasic` (or `Chat.Read` or `Chat.ReadWrite`) permission is required and allows retrieving group chat information. The `ChatMember.Read` permission is optional - if not configured, chat member lists will be returned as empty arrays. The operation will still succeed and return chat information, but without member details.
+
+> **Current Behavior**: With only required permissions:
+> - ✅ Chat IDs, topics, types, and creation timestamps are retrieved successfully
+> - ⚠️ Chat member lists are returned as empty arrays `[]`
+> - ✅ The operation completes without errors (graceful degradation)
+
+> **To Get Full Chat Member Information**: Add the `ChatMember.Read` permission to your Azure AD app registration and grant admin consent. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **API Endpoints Used**:
+> - `GET /me/chats` - Requires `Chat.ReadBasic` (least privileged) or `Chat.Read` or `Chat.ReadWrite` (required)
+> - `GET /me/chats/{chatId}/members` - Requires `Chat.ReadBasic` or `ChatMember.Read` (optional)
+
+> **Documentation**: [Microsoft Graph - List chats](https://learn.microsoft.com/en-us/graph/api/chat-list) | [Microsoft Graph - List chat members](https://learn.microsoft.com/en-us/graph/api/chat-list-members)
+
+---
+
 ## Request Details
 
 | Property | Value |

@@ -1,6 +1,8 @@
 plugins {
     id 'java-library'
     id("io.github.surpsg.code-lines") version "0.0.1"
+    id "jacoco"
+    id("org.sonarqube") version "6.3.1.5724"
 }
 
 codeLinesStat {
@@ -9,6 +11,39 @@ codeLinesStat {
 }
 
 group 'app.krista.extensions.essentials.collaboration'
+
+
+sonar {
+    properties {
+        property('sonar.projectName', 'SonarScanner for Krista Global Catalog (teams-api krista extensions with Jacoco code coverage)')
+        property("sonar.projectKey", "sonar-scanner-teams-api")
+        property("sonar.sources", "src/main/java")
+        property("sonar.tests", "src/test/java")
+        property("sonar.java.binaries", "build/classes/java/main")
+        property("sonar.java.test.binaries", "build/classes/java/test")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.junit.reportPaths", "build/test-results/test")
+    }
+}
+tasks.test {
+    // Generate coverage report after tests run
+    finalizedBy(tasks.jacocoTestReport)
+}
+jacoco {
+    toolVersion = "0.8.11"
+}
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required = true   // Required for SonarQube
+        html.required = true  // Useful for local viewing
+        csv.required = false
+    }
+}
+// Ensure Sonar runs only after JaCoCo report generation
+tasks.named("sonar") {
+    dependsOn(tasks.jacocoTestReport)
+}
 
 /*
  * Use extension.name for archiveBaseName, extension.version for version.
@@ -39,8 +74,10 @@ tasks.register("setReleaseProperties") {
     }
 }
 
-sourceCompatibility = '21'
-targetCompatibility = '21'
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
 
 repositories {
     mavenLocal()
@@ -50,21 +87,19 @@ repositories {
     mavenCentral()
 }
 
-configurations {
-    implementation {
-        canBeConsumed = false
-        canBeResolved = true
-    }
-}
 
 dependencies {
-    annotationProcessor 'app.krista:extension-impl-anno-processors:1.0.115'
-    implementation 'app.krista:krista-apis:1.0.115'
+    annotationProcessor 'app.krista:extension-impl-anno-processors:1.0.126'
+    implementation 'app.krista:krista-apis:1.0.126'
     implementation 'org.glassfish.hk2:hk2-api:3.0.3'
     implementation 'org.glassfish.jersey.media:jersey-media-multipart:2.35'
-    implementation 'com.microsoft.graph:microsoft-graph:5.58.0'
+
+    // Microsoft Auth SDK — core auth + extension API (base classes, annotations, registry)
+    implementation 'app.krista.sdk:microsoft-auth-sdk:1.0.5'
+
+    implementation 'com.microsoft.graph:microsoft-graph:5.76.0'
     implementation 'com.microsoft.graph:microsoft-graph-auth:0.3.0'
-    implementation 'com.azure:azure-identity:1.8.1'
+    implementation 'com.azure:azure-identity:1.11.0'
     implementation 'com.github.scribejava:scribejava-apis:8.3.3'
 
     testImplementation 'com.kristasoft.common:common-test:1.0.39'
@@ -73,6 +108,38 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.0'
     testImplementation 'org.mockito:mockito-core:5.3.1'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.3.1'
+    testImplementation 'org.mockito:mockito-inline:5.2.0'
+}
+
+// Extract pre-built auth + audit + mcp-setup HTML from the microsoft-auth-sdk JAR
+// into build resources. No React build needed — the SDK JAR contains ready-to-serve HTML.
+configurations {
+    sdkUi {
+        canBeResolved = true
+        transitive = false
+    }
+}
+dependencies {
+    sdkUi 'app.krista.sdk:microsoft-auth-sdk:1.0.5'
+}
+tasks.register('extractSDKResources', Copy) {
+    def sdkJar = configurations.sdkUi.singleFile
+    from(zipTree(sdkJar)) {
+        include 'auth/index.html'
+        include 'audit/index.html'
+        include 'mcp-setup/index.html'
+    }
+    into("${project.buildDir}/resources/main")
+    includeEmptyDirs = false
+}
+tasks.named('processResources') {
+    finalizedBy(tasks.named('extractSDKResources'))
+}
+tasks.named('compileTestJava') {
+    dependsOn(tasks.named('extractSDKResources'))
+}
+tasks.named('jar') {
+    dependsOn(tasks.named('extractSDKResources'))
 }
 
 test {
@@ -199,7 +266,7 @@ jar {
 
     manifest {}
     from {
-        configurations.implementation.collect {
+        configurations.runtimeClasspath.collect {
             it.isDirectory() ? it : zipTree(it)
         }
     }

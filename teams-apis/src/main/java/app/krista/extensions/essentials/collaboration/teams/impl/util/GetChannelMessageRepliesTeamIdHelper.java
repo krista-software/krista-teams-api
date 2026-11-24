@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -25,7 +25,7 @@ import app.krista.extensions.essentials.collaboration.teams.errorhandling.consta
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.constants.TeamsResources;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.generators.ExtensionResponseGenerator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.TeamIdForRepliesValidator;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.TeamIdValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ValidationOrchestrator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.Validator;
 import app.krista.extensions.essentials.collaboration.teams.service.ChatService;
@@ -76,8 +76,8 @@ public class GetChannelMessageRepliesTeamIdHelper {
     private void registerValidators() {
         try {
             // Register Team ID validator for replies
-            TeamIdForRepliesValidator teamIdForRepliesValidator = new TeamIdForRepliesValidator(teamService);
-            validationOrchestrator.registerValidator(Validator.ValidationResource.TEAM_ID_FOR_REPLIES, teamIdForRepliesValidator);
+            TeamIdValidator teamIdValidator = new TeamIdValidator(this.teamService);
+            validationOrchestrator.registerValidator(Validator.ValidationResource.TEAM_ID, teamIdValidator);
             LOGGER.info("Registered TeamIdForRepliesValidator for TEAM_ID_FOR_REPLIES");
 
             LOGGER.info("GetChannelMessageRepliesTeamIdHelper.registerValidators() completed successfully");
@@ -93,7 +93,7 @@ public class GetChannelMessageRepliesTeamIdHelper {
 
             // Validate input parameters - validate Team Id
             List<ValidationOrchestrator.ValidationResult> validationResults = validationOrchestrator.validate(
-                    Map.of(Validator.ValidationResource.TEAM_ID_FOR_REPLIES, teamId != null ? teamId : "")
+                    Map.of(Validator.ValidationResource.TEAM_ID, teamId != null ? teamId : "")
             );
 
             // If validation fails, handle it

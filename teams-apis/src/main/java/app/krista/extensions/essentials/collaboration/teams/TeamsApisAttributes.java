@@ -13,68 +13,102 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams;
 
-import app.krista.extension.executor.Invoker;
-import app.krista.extension.request.RoutingInfo;
-import app.krista.extension.request.protos.http.HttpProtocol;
-import app.krista.extension.util.InvokerAttributes;
 import app.krista.extensions.essentials.collaboration.teams.impl.util.Constants;
-import com.github.scribejava.apis.MicrosoftAzureActiveDirectory20Api;
-import com.github.scribejava.core.builder.ServiceBuilder;
-import com.github.scribejava.core.oauth.OAuth20Service;
-import org.jvnet.hk2.annotations.Service;
+import app.krista.sdk.msauth.extension.base.MsAuthAttributes;
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
 
-import javax.inject.Inject;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
-@Service
-public class TeamsApisAttributes {
-    public static final String CLIENT_ID = "clientId";
-    public static final String CLIENT_SECRET = "clientSecret";
-    public static final String TENANT_ID = "tenantId";
-    public static final String EMAIL = "email";
+import static app.krista.extensions.essentials.collaboration.teams.impl.util.Constants.*;
+
+public final class TeamsApisAttributes implements MsAuthAttributes {
+
+    @SerializedName(Constants.EMAIL)
+    private final String email;
+    @SerializedName(Constants.CLIENT_ID)
+    private final String clientId;
+    @SerializedName(Constants.CLIENT_SECRET)
+    private final String clientSecret;
+    @SerializedName(Constants.AUTH_TYPE)
+    private final String authType;
+    @SerializedName(Constants.TENANT_ID)
+    private final String tenantId;
+    @SerializedName("publicAuthMode")
+    private final String publicAuthMode;
+    @SerializedName("privateAuthMode")
+    private final String privateAuthMode;
 
     private final String routingUrl;
-    private String clientId;
-    private String clientSecret;
-    private String mailId;
-    private String tenantId;
-    private OAuth20Service oAuth20Service;
+    private String publicClientId;
+    private String publicClientSecret;
 
-    @Inject
-    public TeamsApisAttributes(Invoker invoker) {
-        this(invoker.getRoutingInfo().getRoutingURL(HttpProtocol.PROTOCOL_NAME, RoutingInfo.Type.APPLIANCE),
-                invoker.getAttributes());
+    public TeamsApisAttributes(String clientId, String clientSecret, String tenantId, String email,
+                               String authType, String routingUrl) {
+        this(clientId, clientSecret, tenantId, email, authType, routingUrl, null, null);
     }
 
-    public TeamsApisAttributes(String routingUrl, Map<String, Object> attributes) {
-        this(routingUrl, InvokerAttributes.getStringOrNull(attributes, CLIENT_ID),
-                InvokerAttributes.getStringOrNull(attributes, CLIENT_SECRET),
-                InvokerAttributes.getStringOrNull(attributes, EMAIL),
-                InvokerAttributes.getStringOrNull(attributes, TENANT_ID));
-    }
-
-    public TeamsApisAttributes(String routingUrl, String clientId, String clientSecret, String mailId, String tenantId) {
-        this.routingUrl = routingUrl;
-        this.clientId = clientId;
-        this.clientSecret = clientSecret;
-        this.mailId = mailId;
+    public TeamsApisAttributes(String clientId, String clientSecret, String tenantId, String email,
+                               String authType, String routingUrl, String publicAuthMode, String privateAuthMode) {
+        loadPublicConfig();
+        this.clientId = clientId == null ? publicClientId : clientId;
+        this.clientSecret = clientSecret == null ? publicClientSecret : clientSecret;
         this.tenantId = tenantId;
+        this.email = email;
+        this.authType = authType;
+        this.publicAuthMode = publicAuthMode != null ? publicAuthMode : "krista";
+        this.privateAuthMode = privateAuthMode;
+        this.routingUrl = routingUrl.replace(LOCAL_EXTN_URL, LOCAL_EXTN_REPLACE_URL);
     }
 
-    public static TeamsApisAttributes create(String routingUrl, Map<String, Object> attributes) {
-        return new TeamsApisAttributes(routingUrl, attributes);
+    public static TeamsApisAttributes create(JsonObject authPayload, String baseurl) {
+        String authType = authPayload.get(Constants.AUTH_TYPE).getAsString();
+        if (Constants.PUBLIC.equals(authType)) {
+            String publicAuthMode = authPayload.has("publicAuthMode") && !authPayload.get("publicAuthMode").isJsonNull()
+                    ? authPayload.get("publicAuthMode").getAsString() : "krista";
+            String clientId = null;
+            String clientSecret = null;
+            String tenantId = null;
+            if ("own".equals(publicAuthMode)) {
+                clientId = authPayload.has(Constants.CLIENT_ID) ? authPayload.get(Constants.CLIENT_ID).getAsString() : null;
+                clientSecret = authPayload.has(Constants.CLIENT_SECRET) ? authPayload.get(Constants.CLIENT_SECRET).getAsString() : null;
+                tenantId = authPayload.has(Constants.TENANT_ID) && !authPayload.get(Constants.TENANT_ID).isJsonNull()
+                        ? authPayload.get(Constants.TENANT_ID).getAsString() : null;
+            }
+            return new TeamsApisAttributes(clientId, clientSecret, tenantId,
+                    authPayload.get(Constants.EMAIL).getAsString(), authType, baseurl, publicAuthMode, null);
+        } else if (Constants.PRIVATE.equals(authType)) {
+            String privateAuthMode = authPayload.has("privateAuthMode") && !authPayload.get("privateAuthMode").isJsonNull()
+                    ? authPayload.get("privateAuthMode").getAsString() : "s2s";
+            String clientId = authPayload.has(Constants.CLIENT_ID) ? authPayload.get(Constants.CLIENT_ID).getAsString() : null;
+            String clientSecret = authPayload.has(Constants.CLIENT_SECRET) ? authPayload.get(Constants.CLIENT_SECRET).getAsString() : null;
+            return new TeamsApisAttributes(clientId, clientSecret,
+                    authPayload.get(Constants.TENANT_ID).getAsString(),
+                    authPayload.get(Constants.EMAIL).getAsString(), authType, baseurl, null, privateAuthMode);
+        } else {
+            throw new IllegalArgumentException(UNSUPPORTED_AUTH);
+        }
     }
 
-    public void update(Map<String, Object> newAttributes) {
-        clientId = InvokerAttributes.getStringOrNull(newAttributes, CLIENT_ID);
-        clientSecret = InvokerAttributes.getStringOrNull(newAttributes, CLIENT_SECRET);
-        mailId = InvokerAttributes.getStringOrNull(newAttributes, EMAIL);
-        tenantId = InvokerAttributes.getStringOrNull(newAttributes, TENANT_ID);
+    private void loadPublicConfig() {
+        Properties properties = new Properties();
+        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream("config.properties")) {
+            properties.load(inputStream);
+            this.publicClientId = properties.getProperty("public.clientId");
+            this.publicClientSecret = properties.getProperty("public.clientSecret");
+        } catch (IOException cause) {
+            throw new RuntimeException("We couldn't load the configuration file required for public authentication. "
+                    + "Please verify that the configuration file exists and is accessible, or contact your administrator for assistance.", cause);
+        }
     }
 
     public String getClientId() {
@@ -89,23 +123,67 @@ public class TeamsApisAttributes {
         return tenantId;
     }
 
-    public String getMailId() {
-        return mailId;
+    public String getEmail() {
+        return email;
     }
 
-    public String getCallbackUrl() {
-        return routingUrl + "/" + Constants.CALLBACK_URL;
+    public String getAuthType() {
+        return authType;
     }
 
-    public synchronized OAuth20Service getOAuth20Service() {
-        if (oAuth20Service == null) {
-            oAuth20Service = new ServiceBuilder(clientId)
-                    .apiSecret(clientSecret)
-                    .defaultScope(Constants.REQUIRED_SCOPE)
-                    .callback(getCallbackUrl())
-                    .build(MicrosoftAzureActiveDirectory20Api.custom(tenantId));
+    public String getPublicAuthMode() {
+        return publicAuthMode != null ? publicAuthMode : "krista";
+    }
+
+    public String getPrivateAuthMode() {
+        return privateAuthMode;
+    }
+
+    public String getCallbackEndPoint() {
+        if (Constants.PUBLIC.equals(authType)) {
+            if ("own".equals(publicAuthMode)) {
+                // Legacy 2.0.9 redirect URI — kept at the jaxrsId root (no "teams" segment) so
+                // existing customer Azure app registrations survive the migration. Tabs live at
+                // teams-apis/teams/...; only the callback resource is mounted at the root.
+                return routingUrl + "/teams-apis/callback";
+            }
+            return routingUrl.replaceAll("/extension/api/.*", DEFAULT_CALLBACK_PATH);
+        } else if (Constants.PRIVATE.equals(authType)) {
+            return routingUrl + "/teams-apis/callback";
+        } else {
+            return EMPTY_STRING;
         }
-        return oAuth20Service;
     }
 
+    @Override
+    public String getForwardPath() {
+        if (Constants.PUBLIC.equals(authType)) {
+            return routingUrl + EXTENSION_FORWARD_PATH;
+        } else {
+            return EMPTY_STRING;
+        }
+    }
+
+    @Override
+    public String getScopeString() {
+        return Constants.REQUIRED_SCOPE;
+    }
+
+    public Map<String, Object> toMap() {
+        Map<String, Object> attributesMap = new HashMap<>();
+        putIfNotNull(attributesMap, Constants.CLIENT_ID, getClientId());
+        putIfNotNull(attributesMap, Constants.CLIENT_SECRET, getClientSecret());
+        putIfNotNull(attributesMap, Constants.TENANT_ID, getTenantId());
+        putIfNotNull(attributesMap, Constants.EMAIL, getEmail());
+        putIfNotNull(attributesMap, Constants.AUTH_TYPE, getAuthType());
+        putIfNotNull(attributesMap, "publicAuthMode", getPublicAuthMode());
+        putIfNotNull(attributesMap, "privateAuthMode", getPrivateAuthMode());
+        return attributesMap;
+    }
+
+    private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
+        if (value != null) {
+            map.put(key, value);
+        }
+    }
 }

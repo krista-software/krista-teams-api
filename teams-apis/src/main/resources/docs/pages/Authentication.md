@@ -6,30 +6,50 @@ The Teams APIs Extension uses **OAuth 2.0** authentication to securely connect w
 
 ---
 
+## Using the Authentication Tab
+
+Authentication is configured on the extension's **Authentication** tab. It presents the settings for connecting Krista to Microsoft Teams, lets you pick which Microsoft Graph scopes to request, and drives the sign-in ("Authorize") flow.
+
+**Typical flow:**
+
+1. Choose an authentication mode (below) and fill in the required fields.
+2. Click **Authorize** to sign in with Microsoft (for the delegated modes) — a Microsoft login popup opens; sign in and grant the requested permissions.
+3. Click **Test Connection** to verify the connection works against Microsoft Graph.
+4. Click **Save** to persist the configuration.
+
+> A connection is only usable once **Authorize** has completed and a token has been stored. Test Connection will report "not authorized" until then.
+
+---
+
 ## Authentication Modes
 
-The Teams APIs Extension supports **User Account Authentication** using OAuth 2.0 authorization code flow.
+The Authentication tab supports three modes:
 
-### User Account Authentication
+### 1. Quick Setup (Krista-managed app)
 
-**How It Works:**
-- Users authenticate with their Microsoft 365 credentials
-- The extension obtains an access token on behalf of the user
-- All operations are performed in the user's context
-- Tokens are automatically refreshed when they expire
+**How it works:** Uses a shared, Krista-managed Microsoft Entra (Azure AD) application. You don't register anything in Azure — you sign in and grant consent, and Krista handles the app registration and callback centrally.
 
-**When to Use:**
-- When you need to perform actions on behalf of a specific user
-- When you need user-specific permissions and access
-- When you want to track which user performed an action
-- For most Teams messaging and query operations
+**When to use:** Fastest way to get started; good for evaluation and most delegated use cases where using Krista's app is acceptable.
 
-**Configuration:**
-- Set the **Email** parameter to the user's Microsoft 365 email address
-- User must authenticate during initial setup
-- Refresh tokens are stored securely for automatic token renewal
+### 2. User Authentication — your own credentials
 
-> **Note**: Service Account authentication is not currently supported. All operations require user context.
+**How it works:** Delegated (authorization-code) sign-in using **your own** Microsoft Entra application (your Client ID, Client Secret, and Tenant ID). Operations run in the signed-in user's context.
+
+**When to use:** When your organization requires its own Azure app registration and consent policies.
+
+**Azure redirect URI to register:** add this exact redirect URI to your app registration —
+
+```
+<your-appliance-routing-url>/teams-apis/callback
+```
+
+> This is the same callback path used by the previous extension version, so upgrading does **not** require re-registering a new redirect URI.
+
+### 3. Machine Authentication — app-only (client credentials)
+
+**How it works:** App-only (client-credentials) authentication with no user sign-in. The extension acts as the application itself using your Client ID, Client Secret, and Tenant ID. Requires **Application** permissions and admin consent in your tenant.
+
+**When to use:** Unattended/service scenarios that don't act on behalf of a specific signed-in user.
 
 ---
 
@@ -39,15 +59,16 @@ The Teams APIs Extension requires the following Microsoft Graph API scopes:
 
 ### Required Scopes
 
-| Scope | Permission Level | Description | Used For |
-|-------|-----------------|-------------|----------|
+| Scope | Permission Level | Description                   | Used For |
+|-------|-----------------|-------------------------------|----------|
 | `openid` | Delegated | OpenID Connect authentication | User identity verification |
-| `offline_access` | Delegated | Maintain access to data | Refresh token generation |
-| `Team.ReadBasic.All` | Delegated | Read team information | Get teams, channels |
-| `Channel.ReadBasic.All` | Delegated | Read channel information | Get channel details |
-| `ChannelMessage.Send` | Delegated | Send channel messages | Post messages to channels |
-| `Chat.ReadWrite` | Delegated | Read and write chat messages | Send/read 1:1 and group chats |
-| `ChatMessage.Send` | Delegated | Send chat messages | Send messages to users |
+| `offline_access` | Delegated | Maintain access to data       | Refresh token generation |
+| `Team.ReadBasic.All` | Delegated | Read team information         | Get teams, channels |
+| `TeamMember.Read.All` | Delegated | Read team member information  | Get teams, channels |
+| `Channel.ReadBasic.All` | Delegated | Read channel information      | Get channel details |
+| `ChannelMessage.Send` | Delegated | Send channel messages         | Post messages to channels |
+| `Chat.ReadWrite` | Delegated | Read and write chat messages  | Send/read 1:1 and group chats |
+| `ChatMessage.Send` | Delegated | Send chat messages            | Send messages to users |
 
 ### Full Scope URLs
 

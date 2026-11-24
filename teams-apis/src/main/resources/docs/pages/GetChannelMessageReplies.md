@@ -8,6 +8,33 @@ This request requires three parameters: the **Channel Message ID** of the parent
 
 ---
 
+## Required Microsoft Graph Permissions
+
+This operation requires the following delegated permissions in your Azure AD application:
+
+| Permission | Purpose | Status |
+|------------|---------|--------|
+| `Team.ReadBasic.All` | Access team information | **REQUIRED** |
+| `Channel.ReadBasic.All` | Access channel information | **REQUIRED** |
+| `ChannelMessage.Read.All` | Read channel messages and replies | **REQUIRED** |
+
+> **Important**: All permissions listed above are required for this operation to work. Without the `ChannelMessage.Read.All` permission, this operation will fail with a 403 Forbidden error.
+
+> **Current Behavior**: Without `ChannelMessage.Read.All` permission:
+> - ❌ The operation will fail with a 403 Forbidden error
+> - ❌ Channel message replies cannot be retrieved
+
+> **To Enable This Operation**: Add the `ChannelMessage.Read.All` permission to your Azure AD app registration and grant admin consent. See [Creating Teams App](CreatingTeamsApp.md#step-7-configure-api-permissions) for setup instructions.
+
+> **API Endpoints Used**:
+> - `GET /teams/{teamId}/channels/{channelId}/messages/{messageId}/replies` - Requires `ChannelMessage.Read.All` (required)
+
+> **Troubleshooting**: If you receive a 403 Forbidden error, verify that the `ChannelMessage.Read.All` permission is configured and admin consent has been granted.
+
+> **Documentation**: [Microsoft Graph - List message replies](https://learn.microsoft.com/en-us/graph/api/chatmessage-list-replies)
+
+---
+
 ## Request Details
 
 | Property | Value |

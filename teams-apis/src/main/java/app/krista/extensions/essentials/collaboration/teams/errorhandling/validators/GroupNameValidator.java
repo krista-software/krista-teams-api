@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -57,7 +57,6 @@ public class GroupNameValidator implements Validator {
             return false;
         }
 
-        try {
             // Try to find the group chat by name
             var group = chatService.getGroupChatByName(resourceId.trim());
 
@@ -68,11 +67,6 @@ public class GroupNameValidator implements Validator {
 
             LOGGER.info("Group name validation passed for: {}", resourceId);
             return true;
-
-        } catch (Exception e) {
-            LOGGER.error("Error during group name validation for '{}': {}", resourceId, e.getMessage(), e);
-            return false;
-        }
     }
 
     @Override

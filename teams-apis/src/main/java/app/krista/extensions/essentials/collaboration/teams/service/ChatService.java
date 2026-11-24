@@ -13,41 +13,30 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.service;
 
-import app.krista.extensions.essentials.collaboration.teams.catalog.entities.*;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.Channel;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.ChannelMessage;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.GroupChat;
+import app.krista.extensions.essentials.collaboration.teams.catalog.entities.Team;
 import app.krista.extensions.essentials.collaboration.teams.catalog.entities.stores.Replies;
 import app.krista.extensions.essentials.collaboration.teams.impl.connectors.GraphServiceClientProvider;
 import app.krista.extensions.essentials.collaboration.teams.impl.connectors.GraphServiceClientProviderFactory;
-import com.microsoft.graph.models.BodyType;
-import com.microsoft.graph.models.Chat;
-import com.microsoft.graph.models.ChatMessage;
-import com.microsoft.graph.models.ItemBody;
-import com.microsoft.graph.requests.ChatCollectionPage;
-import com.microsoft.graph.requests.ChatCollectionRequestBuilder;
-import com.microsoft.graph.requests.ChatMessageCollectionPage;
-import com.microsoft.graph.requests.ConversationMemberCollectionPage;
-import com.microsoft.graph.requests.GraphServiceClient;
-import com.microsoft.graph.models.ConversationMember;
-import com.microsoft.graph.models.AadUserConversationMember;
-import com.microsoft.graph.models.ChatType;
-import com.microsoft.graph.models.User;
-import com.microsoft.graph.requests.UserCollectionPage;
+import com.microsoft.graph.http.GraphServiceException;
+import com.microsoft.graph.models.*;
+import com.microsoft.graph.requests.*;
 import okhttp3.Request;
 import org.jvnet.hk2.annotations.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.*;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -60,7 +49,7 @@ import java.util.stream.Collectors;
 @Service
 public class ChatService {
 
-    private final GraphServiceClientProvider clientProvider;
+    private final GraphServiceClientProviderFactory providerFactory;
     private final TeamService teamService;
     private final ChannelService channelService;
     private static final Logger logger = LoggerFactory.getLogger(ChatService.class);
@@ -75,9 +64,32 @@ public class ChatService {
 
     @Inject
     public ChatService(GraphServiceClientProviderFactory providerFactory, TeamService teamService, ChannelService channelService) {
-        this.clientProvider = providerFactory.create();
+        this.providerFactory = providerFactory;
         this.teamService = teamService;
         this.channelService = channelService;
+    }
+
+    /**
+     * Resolves the provider on every call — never cached. This service is an HK2 singleton, so
+     * caching would freeze the first caller's context (typically the operator) and reuse it for
+     * every user, breaking per-user auth. {@code providerFactory.create()} captures the current
+     * request's context (invokeAsUser / wsContact) at call time, and creating it here (not in the
+     * constructor) lets a per-user MustAuthorizeException surface from the catalog method.
+     */
+    private GraphServiceClientProvider clientProvider() {
+        return providerFactory.create();
+    }
+
+    /**
+     * Acquires the delegated Graph client for the current user, translating the SDK's
+     * checked {@link IOException} (token acquisition failure) into a RuntimeException.
+     */
+    private GraphServiceClient<Request> getUserClient() {
+        try {
+            return clientProvider().getGraphServiceClientForUser(null, null);
+        } catch (IOException cause) {
+            throw new RuntimeException("We couldn't acquire a Microsoft Graph client for the current user. Please try again.", cause);
+        }
     }
 
     /**
@@ -108,8 +120,8 @@ public class ChatService {
             return false;
         }
 
-        // Get the joined teams
-        List<Team> joinedTeams = teamService.getJoinedTeams(teamName);
+        // Get the joined teams (prefer per-user credentials so we find the correct user's team)
+        List<Team> joinedTeams = teamService.getJoinedTeamsByNamePreferringPerUser(teamName);
 
         // Find the current team by name
         Team currentTeam = joinedTeams.stream()
@@ -134,8 +146,8 @@ public class ChatService {
             return false;
         }
 
-        // Send the message to the channel
-        GraphServiceClient<Request> graphServiceClientForUser = clientProvider.getGraphServiceClientForUser(null, null);
+        // Send the message to the channel (prefer per-user credentials)
+        GraphServiceClient<Request> graphServiceClientForUser = initializeGroupChatClient();
         ChatMessage chatMessage = new ChatMessage();
         ItemBody body = new ItemBody();
         body.content = message;
@@ -169,7 +181,7 @@ public class ChatService {
             return false;
         }
 
-        GraphServiceClient<Request> graphServiceClientForUser = clientProvider.getGraphServiceClientForUser(null, null);
+        GraphServiceClient<Request> graphServiceClientForUser = getUserClient();
         // Build the filter query with case-insensitive comparison
         String filterQuery = String.format("chatType eq '%s' and tolower(topic) eq tolower('%s')", "group", groupName);
         // select variables
@@ -245,63 +257,59 @@ public class ChatService {
                 userEmail, messageContent != null ? messageContent.length() : 0, reuseChatId, logConversation);
 
         Map<String, String> result = new HashMap<>();
-        try {
-            GraphServiceClient<Request> graphServiceClient = clientProvider.getGraphServiceClientForUser(null, null);
+        GraphServiceClient<Request> graphServiceClient = getUserClient();
 
-            // Step 1: Get or create chat ID
-            String chatId = null;
-            if (reuseChatId) {
-                // First check if we have a stored chat ID for this user
-                chatId = getStoredChatIdForUser(userEmail);
-                if (chatId != null) {
-                    logger.debug("Found stored chat ID for user: {} - chatId: {}", userEmail, chatId);
-                } else {
-                    // If no stored chat ID, search for existing direct chat
-                    chatId = findExistingDirectChat(graphServiceClient, userEmail);
-                    logger.debug("Existing chat search result for {}: {}", userEmail, chatId != null ? chatId : "not found");
-                }
-            }
-
-            if (chatId == null) {
-                // Create new 1:1 chat
-                logger.info("Creating new 1:1 chat with user: {}", userEmail);
-                chatId = createOneOnOneChat(graphServiceClient, userEmail);
-            }
-
-            // Step 2: Send message to the chat using the enhanced approach
-            Map<String, String> messageResult = sendMessageToChatWithDetails(graphServiceClient, chatId, messageContent, isHtml);
-
-            if ("200".equals(messageResult.get("Status Code")) || "201".equals(messageResult.get("Status Code"))) {
-                result.put("Status Code", messageResult.get("Status Code"));
-                result.put("Message Id", messageResult.get("Message Id"));
-                result.put("Chat Id", chatId);
-                result.put("Response Message", "Message sent successfully to user " + userEmail);
-
-                // Log conversation if requested
-                if (logConversation) {
-                    storeChatIdForUser(userEmail, chatId);
-                    logger.debug("Conversation logging completed for user: {}, chatId: {}", userEmail, chatId);
-                }
-
-                logger.info("Successfully sent message to user: {}, messageId: {}, chatId: {}",
-                        userEmail, messageResult.get("Message Id"), chatId);
+        // Step 1: Get or create chat ID
+        String chatId = null;
+        if (reuseChatId) {
+            // First check if we have a stored chat ID for this user
+            chatId = getStoredChatIdForUser(userEmail);
+            if (chatId != null) {
+                logger.debug("Found stored chat ID for user: {} - chatId: {}", userEmail, chatId);
             } else {
-                result.put("Status Code", messageResult.get("Status Code"));
-                result.put("Message Id", "");
-                result.put("Chat Id", chatId);
-                result.put("Response Message", "Error: " + messageResult.get("Response Message"));
+                // If no stored chat ID, search for existing direct chat
+                chatId = findExistingDirectChat(graphServiceClient, userEmail);
+                logger.debug("Existing chat search result for {}: {}", userEmail, chatId != null ? chatId : "not found");
+            }
+        }
+
+        if (chatId == null) {
+            // Create new 1:1 chat
+            logger.info("Creating new 1:1 chat with user: {}", userEmail);
+            chatId = createOneOnOneChat(graphServiceClient, userEmail);
+        }
+
+        // Step 2: Send message to the chat using the enhanced approach
+        Map<String, String> messageResult = sendMessageToChatWithDetails(graphServiceClient, chatId, messageContent, isHtml);
+
+        if ("200".equals(messageResult.get("Status Code")) || "201".equals(messageResult.get("Status Code"))) {
+            result.put("Status Code", messageResult.get("Status Code"));
+            result.put("Message Id", messageResult.get("Message Id"));
+            result.put("Chat Id", chatId);
+
+            // Create appropriate success message based on message type
+            String messageType = isHtml ? "HTML message" : "Message";
+            result.put("Response Message", messageType + " sent successfully to user " + userEmail);
+
+            // Log conversation if requested
+            if (logConversation) {
+                storeChatIdForUser(userEmail, chatId);
+                logger.debug("Conversation logging completed for user: {}, chatId: {}", userEmail, chatId);
             }
 
-            return result;
-
-        } catch (Exception e) {
-            logger.error("Error in sendMessageToUserWithDetails for user: {}", userEmail, e);
-            result.put("Status Code", "500");
+            logger.info("Successfully sent {} to user: {}, messageId: {}, chatId: {}",
+                    isHtml ? "HTML message" : "message", userEmail, messageResult.get("Message Id"), chatId);
+        } else {
+            result.put("Status Code", messageResult.get("Status Code"));
             result.put("Message Id", "");
-            result.put("Chat Id", "");
-            result.put("Response Message", "Error: " + e.getMessage());
-            return result;
+            result.put("Chat Id", chatId);
+
+            // Create appropriate error message based on message type
+            String messageType = isHtml ? "HTML message" : "Message";
+            result.put("Response Message", "Error sending " + messageType.toLowerCase() + " to user " + userEmail + ": " + messageResult.get("Response Message"));
         }
+
+        return result;
     }
 
     /**
@@ -317,7 +325,6 @@ public class ChatService {
             logger.error("Invalid chat ID. Returning false.");
             return false;
         }
-
         ChatMessage chatMessage = new ChatMessage();
         ItemBody body = new ItemBody();
         body.content = message;
@@ -326,7 +333,7 @@ public class ChatService {
         }
         chatMessage.body = body;
 
-        GraphServiceClient<Request> graphServiceClientForUser = clientProvider.getGraphServiceClientForUser(null, null);
+        GraphServiceClient<Request> graphServiceClientForUser = getUserClient();
 
         graphServiceClientForUser.chats(chatId).messages()
                 .buildRequest()
@@ -628,6 +635,7 @@ public class ChatService {
      * @param graphClient The Graph service client.
      * @param userEmail   The email address.
      * @return The user ID if found, null otherwise.
+     * @throws RuntimeException if the error is due to missing permissions
      */
     private String getUserIdByEmail(GraphServiceClient<Request> graphClient, String userEmail) {
         logger.debug("ChatService.getUserIdByEmail() called for email: {}", userEmail);
@@ -691,13 +699,26 @@ public class ChatService {
 
     private GraphServiceClient<Request> initializeGraphClient() {
         logger.info("Initializing GraphServiceClient...");
-        GraphServiceClient<Request> graphServiceClientForUser = clientProvider.getGraphServiceClientForUser(null, null);
+        GraphServiceClient<Request> graphServiceClientForUser = getUserClient();
         if (graphServiceClientForUser == null) {
             logger.error("GraphServiceClient initialization failed.");
             throw new IllegalStateException("GraphServiceClient is null. Initialization failed.");
         }
         logger.info("GraphServiceClient initialized successfully.");
         return graphServiceClientForUser;
+    }
+
+    /**
+     * Initializes a Graph client for group chat operations, preferring the current user's
+     * per-user credentials (wsContact) over the operator account. Falls back to the operator
+     * if no per-user credentials are stored. This is needed because GET /chats/{id}/messages
+     * requires the caller to be a member of the chat — the operator service account is not.
+     */
+    private GraphServiceClient<Request> initializeGroupChatClient() {
+        logger.info("Initializing GraphServiceClient for group chat (preferring per-user credentials)...");
+        GraphServiceClient<Request> client = providerFactory.getPreferringPerUserGraphClient();
+        logger.info("GraphServiceClient initialized successfully (group chat path).");
+        return client;
     }
 
     private ChannelMessage processMessage(ChatMessage message) {
@@ -760,7 +781,6 @@ public class ChatService {
     public List<ChannelMessage> getChannelMessagesWithDateRangeLimit(String channelID, String teamID, Long fromDate, Long toDate, int limit) {
         logger.info("getChannelMessagesWithDateRangeLimit() invoked with channelID: {}, teamID: {}, fromDate: {}, toDate: {}, limit: {}",
                 channelID, teamID, fromDate, toDate, limit);
-
         // If toDate is null, set it to current date for better user experience
         Long effectiveToDate = toDate != null ? toDate : System.currentTimeMillis();
         if (toDate == null) {
@@ -866,6 +886,9 @@ public class ChatService {
 
                 // Update pagination state
                 updatePaginationState(messagesPage, currentPage, context);
+
+            } catch (GraphServiceException gse) {
+                throw gse;
 
             } catch (Exception e) {
                 logger.error("Error fetching messages: {}", e.getMessage(), e);
@@ -1022,28 +1045,54 @@ public class ChatService {
     public List<ChannelMessage> getGroupChats(String chatID, Long fromDate, Long toDate) {
         logger.info("getGroupChats() invoked with chatID: {}, fromDate: {}, toDate: {}", chatID, fromDate, toDate);
 
-        // If toDate is null, set it to current date for better user experience
-        Long effectiveToDate = toDate != null ? toDate : System.currentTimeMillis();
-        if (toDate == null) {
-            logger.info("No toDate provided, using current date: {}", effectiveToDate);
+        try {
+            // If toDate is null, set it to current date for better user experience
+            Long effectiveToDate = toDate != null ? toDate : System.currentTimeMillis();
+            if (toDate == null) {
+                logger.info("No toDate provided, using current date: {}", effectiveToDate);
+            }
+
+            // Validate inputs
+            validateGroupChatInputs(chatID, fromDate);
+
+            // Initialize Graph client — uses per-user credentials if available (needed for chat member access)
+            GraphServiceClient<Request> graphServiceClientForUser = initializeGroupChatClient();
+
+            // Initialize pagination context
+            GroupChatPaginationContext context = initializeGroupChatPaginationContext();
+
+            // Fetch and filter messages
+            List<ChannelMessage> matchingMessages = fetchAndFilterGroupChatMessages(
+                    chatID, fromDate, effectiveToDate, graphServiceClientForUser, context);
+
+            logger.info("Total messages processed: {}", context.totalProcessed);
+            logger.info("Total matching messages found: {}", matchingMessages.size());
+            return matchingMessages;
+
+        } catch (IllegalStateException ise) {
+            // Handle authentication errors specifically
+            String errorMessage = ise.getMessage();
+            if (errorMessage != null && errorMessage.contains("Failed to get account")) {
+                logger.error("Authentication error in getGroupChats for chatID: {}", chatID, ise);
+
+                String friendlyMessage = "Authentication Error: Unable to retrieve account information.\n\n" +
+                        "This error typically occurs when:\n" +
+                        "  • The Teams API extension is not properly authenticated\n" +
+                        "  • The authentication token has expired\n" +
+                        "  • The authorized account is not available\n\n" +
+                        "To resolve this issue:\n" +
+                        "1. Go to the Teams API extension configuration in Krista\n" +
+                        "2. Re-authenticate the extension with your Microsoft account\n" +
+                        "3. Ensure you have the necessary permissions\n" +
+                        "4. Retry the operation\n\n" +
+                        "If the problem persists, contact your administrator.";
+
+                throw new RuntimeException(friendlyMessage, ise);
+            }
+
+            // For other IllegalStateExceptions, re-throw
+            throw ise;
         }
-
-        // Validate inputs
-        validateGroupChatInputs(chatID, fromDate);
-
-        // Initialize Graph client
-        GraphServiceClient<Request> graphServiceClientForUser = initializeGraphClient();
-
-        // Initialize pagination context
-        GroupChatPaginationContext context = initializeGroupChatPaginationContext();
-
-        // Fetch and filter messages
-        List<ChannelMessage> matchingMessages = fetchAndFilterGroupChatMessages(
-                chatID, fromDate, effectiveToDate, graphServiceClientForUser, context);
-
-        logger.info("Total messages processed: {}", context.totalProcessed);
-        logger.info("Total matching messages found: {}", matchingMessages.size());
-        return matchingMessages;
     }
 
     /**
@@ -1127,8 +1176,12 @@ public class ChatService {
                 // Update pagination state
                 updateGroupChatPaginationState(messagesPage, currentPage, context);
 
+            } catch (GraphServiceException gse) {
+                // Handle permission errors specifically
+                throw gse;
+
             } catch (Exception e) {
-                logger.error("Error fetching messages: {}", e.getMessage(), e);
+                logger.error("Error fetching messages for chatID: {}: {}", chatID, e.getMessage(), e);
                 context.hasMoreMessages = false; // Stop on error
             }
         }
@@ -1316,80 +1369,75 @@ public class ChatService {
         // Select variables
         String selectFields = "id,topic,chatType,createdDateTime"; // Fields to select
 
-        try {
-            ChatCollectionPage chats = graphServiceClientForUser.me().chats()
-                    .buildRequest()
-                    .select(selectFields)
-                    .filter(filterQuery)
-                    .get();
+        ChatCollectionPage chats = graphServiceClientForUser.me().chats()
+                .buildRequest()
+                .select(selectFields)
+                .filter(filterQuery)
+                .get();
 
-            List<Chat> allChats = new ArrayList<>();
+        List<Chat> allChats = new ArrayList<>();
 
-            // Iterate over all pages of results
-            while (chats != null) {
-                // Add all chats to the ArrayList
-                allChats.addAll(chats.getCurrentPage());
+        // Iterate over all pages of results
+        while (chats != null) {
+            // Add all chats to the ArrayList
+            allChats.addAll(chats.getCurrentPage());
 
-                // Check if there are more pages to retrieve
-                ChatCollectionRequestBuilder nextPage = chats.getNextPage();
-                if (nextPage != null) {
-                    chats = nextPage.buildRequest().get();
-                } else {
-                    break; // No more pages
-                }
-            }
-
-            if (allChats.isEmpty()) {
-                logger.warn("No chat group found with the provided name: {}", groupName);
-                return null;
-            }
-
-            if (allChats.size() > 1) {
-                logger.warn("Multiple chat groups found with the same name: {}", groupName);
-                logger.info("Returning the first match.");
-            }
-
-            // Convert the first matching Chat to a GroupChat entity
-            Chat chat = allChats.get(0);
-            GroupChat groupChat = new GroupChat();
-            groupChat.groupId = chat.id;
-            groupChat.topic = chat.topic;
-            groupChat.type = chat.chatType != null ? chat.chatType.toString() : "Unknown";
-
-            // Convert createdDateTime if available
-            if (chat.createdDateTime != null) {
-                try {
-                    groupChat.createdDateTime = chat.createdDateTime.toInstant().toEpochMilli();
-                } catch (Exception e) {
-                    logger.warn("Error converting date: {}", e.getMessage());
-                    groupChat.createdDateTime = null;
-                }
-            }
-
-            // Retrieve and populate chat members
-            GraphServiceClient<Request> graphClient = clientProvider.getGraphServiceClientForUser(null, null);
-            groupChat.members = getChatMembers(graphClient, chat.id);
-
-            // Log the members information
-            logger.info("Group chat '{}' has {} members", groupChat.topic,
-                    groupChat.members != null ? groupChat.members.size() : 0);
-            if (groupChat.members != null && !groupChat.members.isEmpty()) {
-                logger.info("Members for group chat '{}': {}", groupChat.topic, groupChat.members);
-                for (int i = 0; i < groupChat.members.size(); i++) {
-                    Map<String, Object> member = groupChat.members.get(i);
-                    logger.info("Member {}: Name='{}', Email='{}'",
-                            i + 1, member.get("Name"), member.get("Email"));
-                }
+            // Check if there are more pages to retrieve
+            ChatCollectionRequestBuilder nextPage = chats.getNextPage();
+            if (nextPage != null) {
+                chats = nextPage.buildRequest().get();
             } else {
-                logger.warn("No members found for group chat '{}' - this may be due to insufficient permissions",
-                        groupChat.topic);
+                break; // No more pages
             }
+        }
 
-            return groupChat;
-        } catch (Exception e) {
-            logger.error("Error in getGroupChatByName: {}", e.getMessage(), e);
+        if (allChats.isEmpty()) {
+            logger.warn("No chat group found with the provided name: {}", groupName);
             return null;
         }
+
+        if (allChats.size() > 1) {
+            logger.warn("Multiple chat groups found with the same name: {}", groupName);
+            logger.info("Returning the first match.");
+        }
+
+        // Convert the first matching Chat to a GroupChat entity
+        Chat chat = allChats.get(0);
+        GroupChat groupChat = new GroupChat();
+        groupChat.groupId = chat.id;
+        groupChat.topic = chat.topic;
+        groupChat.type = chat.chatType != null ? chat.chatType.toString() : "Unknown";
+
+        // Convert createdDateTime if available
+        if (chat.createdDateTime != null) {
+            try {
+                groupChat.createdDateTime = chat.createdDateTime.toInstant().toEpochMilli();
+            } catch (Exception e) {
+                logger.warn("Error converting date: {}", e.getMessage());
+                groupChat.createdDateTime = null;
+            }
+        }
+
+        // Retrieve and populate chat members
+        GraphServiceClient<Request> graphClient = getUserClient();
+        groupChat.members = getChatMembers(graphClient, chat.id);
+
+        // Log the members information
+        logger.info("Group chat '{}' has {} members", groupChat.topic,
+                groupChat.members != null ? groupChat.members.size() : 0);
+        if (groupChat.members != null && !groupChat.members.isEmpty()) {
+            logger.info("Members for group chat '{}': {}", groupChat.topic, groupChat.members);
+            for (int i = 0; i < groupChat.members.size(); i++) {
+                Map<String, Object> member = groupChat.members.get(i);
+                logger.info("Member {}: Name='{}', Email='{}'",
+                        i + 1, member.get("Name"), member.get("Email"));
+            }
+        } else {
+            logger.warn("No members found for group chat '{}' - this may be due to insufficient permissions",
+                    groupChat.topic);
+        }
+
+        return groupChat;
     }
 
     /**
@@ -1403,7 +1451,7 @@ public class ChatService {
         // Create a cache for user details to avoid duplicate lookups
         ConcurrentHashMap<String, Map<String, Object>> userCache = new ConcurrentHashMap<>();
 
-        GraphServiceClient<Request> graphServiceClientForUser = initializeGraphClient();
+        GraphServiceClient<Request> graphServiceClientForUser = initializeGroupChatClient();
 
         // Build the filter query to get group chats as well as meeting chats
         String filterQuery = "chatType eq 'group' or chatType eq 'meeting'";
@@ -1474,6 +1522,82 @@ public class ChatService {
         } catch (Exception e) {
             logger.error("Error retrieving group chats: {}", e.getMessage(), e);
             // Return empty list instead of throwing exception
+            return Collections.emptyList();
+        }
+    }
+
+    public List<GroupChat> getFilteredGroupChats(int limitValue, String topic, String chatType) {
+        logger.info("getFilteredGroupChats() invoked with limit={}, topic={}, chatType={}", limitValue, topic, chatType);
+
+        ConcurrentHashMap<String, Map<String, Object>> userCache = new ConcurrentHashMap<>();
+        GraphServiceClient<Request> graphServiceClientForUser = initializeGroupChatClient();
+
+        String filterQuery;
+        if (chatType != null && !chatType.isBlank()) {
+            filterQuery = "chatType eq '" + chatType + "'";
+        } else {
+            filterQuery = "chatType eq 'group' or chatType eq 'meeting'";
+        }
+        String selectFields = "id,topic,chatType,createdDateTime";
+
+        try {
+            ChatCollectionPage chats = graphServiceClientForUser.me().chats()
+                    .buildRequest()
+                    .select(selectFields)
+                    .filter(filterQuery)
+                    .get();
+
+            List<GroupChat> basicGroupChats = new ArrayList<>();
+
+            while (chats != null) {
+                for (Chat chat : chats.getCurrentPage()) {
+                    GroupChat groupChat = convertChatToGroupChatBasic(chat);
+                    if (groupChat != null) {
+                        if (topic == null || topic.isBlank() || (groupChat.topic != null && groupChat.topic.toLowerCase().contains(topic.toLowerCase()))) {
+                            basicGroupChats.add(groupChat);
+                        }
+                    }
+                    if (limitValue > 0 && basicGroupChats.size() >= limitValue) break;
+                }
+                if (limitValue > 0 && basicGroupChats.size() >= limitValue) break;
+
+                ChatCollectionRequestBuilder nextPage = chats.getNextPage();
+                if (nextPage != null) {
+                    chats = nextPage.buildRequest().get();
+                } else {
+                    break;
+                }
+            }
+
+            logger.info("Found {} filtered group chats, now fetching members in parallel", basicGroupChats.size());
+
+            int maxThreads = Math.min(8, Runtime.getRuntime().availableProcessors());
+            ExecutorService executor = Executors.newFixedThreadPool(maxThreads);
+            try {
+                List<GroupChat> enrichedGroupChats = basicGroupChats.parallelStream()
+                        .map(basicChat -> {
+                            try {
+                                return enrichGroupChatWithMembers(basicChat, graphServiceClientForUser, userCache);
+                            } catch (Exception e) {
+                                logger.error("Error enriching chat {}: {}", basicChat.groupId, e.getMessage(), e);
+                                return basicChat;
+                            }
+                        })
+                        .collect(Collectors.toList());
+                return enrichedGroupChats;
+            } finally {
+                executor.shutdown();
+                try {
+                    if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                        executor.shutdownNow();
+                    }
+                } catch (InterruptedException e) {
+                    executor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error retrieving filtered group chats: {}", e.getMessage(), e);
             return Collections.emptyList();
         }
     }
@@ -1867,36 +1991,24 @@ public class ChatService {
      *
      * @param userEmail The email address to validate
      * @return true if user exists and is accessible, false otherwise
+     * @throws RuntimeException if the error is due to missing permissions or authentication issues
      */
     public boolean validateUserExists(String userEmail) {
         logger.debug("ChatService.validateUserExists() called for email: {}", userEmail);
         long startTime = System.currentTimeMillis();
+        // Use admin client to avoid account ID issues during validation
+        GraphServiceClient<Request> graphClient = clientProvider().getGraphServiceClientForAdmin();
+        String userId = getUserIdByEmail(graphClient, userEmail);
 
-        try {
-            // Use the existing getUserIdByEmail method to check if user exists
-            GraphServiceClient<Request> graphClient = clientProvider.getGraphServiceClientForUser(null, null);
-            String userId = getUserIdByEmail(graphClient, userEmail);
+        long duration = System.currentTimeMillis() - startTime;
 
-            long duration = System.currentTimeMillis() - startTime;
-
-            if (userId != null) {
-                logger.debug("User validation SUCCESS: User exists for email: {}, userId: {}, duration: {}ms",
-                           userEmail, userId, duration);
-                return true;
-            } else {
-                logger.warn("User validation FAILED: No user found for email: {}, duration: {}ms",
-                          userEmail, duration);
-                return false;
-            }
-
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            logger.error("User validation ERROR: Exception occurred while validating user existence for email: {}, duration: {}ms",
-                       userEmail, duration, e);
-            logger.debug("Exception details: type={}, message={}", e.getClass().getSimpleName(), e.getMessage());
-
-            // Return false for any exceptions to be safe
-            // This ensures we don't accidentally allow invalid users due to API errors
+        if (userId != null) {
+            logger.debug("User validation SUCCESS: User exists for email: {}, userId: {}, duration: {}ms",
+                    userEmail, userId, duration);
+            return true;
+        } else {
+            logger.warn("User validation FAILED: No user found for email: {}, duration: {}ms",
+                    userEmail, duration);
             return false;
         }
     }

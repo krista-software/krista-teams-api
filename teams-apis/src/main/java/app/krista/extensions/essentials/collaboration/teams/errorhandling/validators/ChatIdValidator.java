@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -31,14 +31,23 @@ import java.util.regex.Pattern;
 /**
  * Validator for Teams Chat ID format.
  * Validates that the Chat ID follows the expected Teams format.
+ *
+ * Supported formats:
+ * - Group chats: 19:[hex]@thread.v2 (e.g., 19:abc123def456@thread.v2)
+ * - Meeting chats: 19:meeting_[base64]@thread.v2 (e.g., 19:meeting_MDMwYjRlMWEtYjIyYi00ZjAzLTgxMmYtNGZhN2ZkMDZmNDky@thread.v2)
+ * - Compound format: 19:[id]@thread.v2-19:[id]@thread.v2
  */
 @Service
 public class ChatIdValidator extends BaseValidator {
     private static final Logger LOGGER = LoggerFactory.getLogger(ChatIdValidator.class);
 
-    // Teams Chat ID format: Can be single format like 19:xxxxx@thread.v2 or compound format like 19:xxxxx@thread.v2-19:xxxxx@thread.v2
+    // Teams Chat ID format: Accepts various valid formats
+    // - Group chats: 19:[hex]@thread.v2
+    // - Meeting chats: 19:meeting_[base64]@thread.v2
+    // - Compound format: 19:[id]@thread.v2-19:[id]@thread.v2
+    // The ID part can contain alphanumeric characters, underscores, and hyphens
     private static final Pattern CHAT_ID_PATTERN = Pattern.compile(
-            "^19:[a-fA-F0-9]{30,32}@thread\\.v2(?:-19:[a-fA-F0-9]{30,32}@thread\\.v2)?$"
+            "^19:[a-zA-Z0-9_-]+@thread\\.v2(?:-19:[a-zA-Z0-9_-]+@thread\\.v2)?$"
     );
 
     /**
@@ -72,16 +81,22 @@ public class ChatIdValidator extends BaseValidator {
 
     @Override
     public String getFetchStepMessage() {
-        return "Please enter a valid Chat ID in the format '19:xxxxx@thread.v2' or '19:xxxxx@thread.v2-19:xxxxx@thread.v2'.";
+        return "Please enter a valid Chat ID. Supported formats:\n" +
+               "  • Group chats: 19:xxxxx@thread.v2\n" +
+               "  • Meeting chats: 19:meeting_xxxxx@thread.v2\n" +
+               "  • Compound format: 19:xxxxx@thread.v2-19:xxxxx@thread.v2";
     }
 
     @Override
     public String getConfirmationStepMessage(String resourceId, Map<ValidationResource, String> context) {
-        return String.format("The provided Chat ID '%s' is invalid. It must be in the format '19:xxxxx@thread.v2' or '19:xxxxx@thread.v2-19:xxxxx@thread.v2'.", resourceId);
+        return String.format("The provided Chat ID '%s' is invalid. Please provide a valid Chat ID in one of these formats:\n" +
+                           "  • Group chats: 19:xxxxx@thread.v2\n" +
+                           "  • Meeting chats: 19:meeting_xxxxx@thread.v2\n" +
+                           "  • Compound format: 19:xxxxx@thread.v2-19:xxxxx@thread.v2", resourceId);
     }
 
     @Override
     public String getErrMessage(String resourceId) {
-        return String.format("Invalid Chat ID: %s. Expected format: '19:xxxxx@thread.v2' or '19:xxxxx@thread.v2-19:xxxxx@thread.v2'", resourceId);
+        return String.format("Invalid Chat ID: %s. Please provide a valid Chat ID that exists and you have access to.", resourceId);
     }
 }

@@ -13,11 +13,13 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
 
+import app.krista.extension.executor.Invoker;
+import app.krista.extensions.essentials.collaboration.teams.impl.audit.TeamsAuditService;
 import app.krista.ksdk.telemetry.TelemetryMetrics;
 import org.jvnet.hk2.annotations.Service;
 import org.slf4j.Logger;
@@ -25,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.Map;
 
 /**
  * Helper class for recording telemetry metrics for Teams APIs operations.
@@ -71,19 +74,71 @@ public class TelemetryHelper {
     private final TelemetryMetrics telemetryMetrics;
 
     /**
-     * Constructs a new TelemetryHelper with the required dependencies.
+     * Audit service used to record CATALOG_REQUEST_* audit events alongside telemetry.
+     * May be {@code null} when this helper was constructed via the legacy single-arg
+     * constructor, in which case audit recording is a no-op.
+     */
+    private final TeamsAuditService auditService;
+
+    /**
+     * Invoker id associated with the current request, used to attribute audit events.
+     * May be {@code null} when this helper was constructed via the legacy single-arg
+     * constructor, in which case audit recording is a no-op.
+     */
+    private final String invokerId;
+
+    /**
+     * Constructs a new TelemetryHelper with only telemetry metrics support.
      *
-     * <p>This constructor is used by the HK2 dependency injection framework.</p>
+     * <p>This constructor is retained for backward compatibility with existing callers
+     * and tests. Audit recording is disabled ({@code auditService}/{@code invokerId}
+     * are {@code null}) when this constructor is used.</p>
      *
      * @param telemetryMetrics the telemetry metrics instance for recording metrics, must not be null
      * @throws IllegalArgumentException if telemetryMetrics is null
      */
-    @Inject
     public TelemetryHelper(TelemetryMetrics telemetryMetrics) {
         if (telemetryMetrics == null) {
             throw new IllegalArgumentException("telemetryMetrics cannot be null");
         }
         this.telemetryMetrics = telemetryMetrics;
+        this.auditService = null;
+        this.invokerId = null;
+        LOGGER.debug("TelemetryHelper initialized successfully");
+    }
+
+    /**
+     * Constructs a new TelemetryHelper with telemetry metrics and audit recording support.
+     *
+     * <p>This constructor is used by the HK2 dependency injection framework. The invoker id
+     * is resolved from the injected {@link Invoker} so audit events can be attributed to the
+     * calling invoker.</p>
+     *
+     * @param telemetryMetrics the telemetry metrics instance for recording metrics, must not be null
+     * @param auditService     the audit service used to record catalog request audit events
+     * @param invoker          the invoker whose id is used to attribute audit events
+     * @throws IllegalArgumentException if telemetryMetrics is null
+     */
+    @Inject
+    public TelemetryHelper(TelemetryMetrics telemetryMetrics, TeamsAuditService auditService, Invoker invoker) {
+        this(telemetryMetrics, auditService, invoker == null ? null : invoker.getInvokerId());
+    }
+
+    /**
+     * Constructs a new TelemetryHelper with telemetry metrics and audit recording support.
+     *
+     * @param telemetryMetrics the telemetry metrics instance for recording metrics, must not be null
+     * @param auditService     the audit service used to record catalog request audit events
+     * @param invokerId        the invoker id used to attribute audit events
+     * @throws IllegalArgumentException if telemetryMetrics is null
+     */
+    public TelemetryHelper(TelemetryMetrics telemetryMetrics, TeamsAuditService auditService, String invokerId) {
+        if (telemetryMetrics == null) {
+            throw new IllegalArgumentException("telemetryMetrics cannot be null");
+        }
+        this.telemetryMetrics = telemetryMetrics;
+        this.auditService = auditService;
+        this.invokerId = invokerId;
         LOGGER.debug("TelemetryHelper initialized successfully");
     }
 
@@ -102,6 +157,7 @@ public class TelemetryHelper {
         } catch (Exception e) {
             LOGGER.warn("Failed to record telemetry for operation start: {}", e.getMessage());
         }
+        audit("CATALOG_REQUEST_TRIGGERED", "info", operationName, null, null);
     }
 
     /**
@@ -121,6 +177,7 @@ public class TelemetryHelper {
         } catch (Exception e) {
             LOGGER.warn("Failed to record telemetry for operation success: {}", e.getMessage());
         }
+        audit("CATALOG_REQUEST_SUCCESS", "success", operationName, null, null);
     }
 
     /**
@@ -142,6 +199,7 @@ public class TelemetryHelper {
         } catch (Exception e) {
             LOGGER.warn("Failed to record telemetry for operation failure: {}", e.getMessage());
         }
+        audit("CATALOG_REQUEST_FAILURE", "failure", operationName, error.getMessage(), error.getClass().getSimpleName());
     }
 
     /**
@@ -177,6 +235,31 @@ public class TelemetryHelper {
             LOGGER.debug("Telemetry: Recorded channel count {} for operation {}", count, operationName);
         } catch (Exception e) {
             LOGGER.warn("Failed to record telemetry for channel count: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Safely records a catalog request audit event, if audit recording is configured.
+     *
+     * <p>This method is a no-op when the helper was constructed without an audit service
+     * or invoker id (e.g. via the legacy single-arg constructor). Any exception raised by
+     * the audit service is caught and logged, never propagated, so audit recording failures
+     * cannot disrupt the underlying catalog request.</p>
+     *
+     * @param eventType     the audit event type, e.g. {@code CATALOG_REQUEST_TRIGGERED}
+     * @param status        the status associated with the event, e.g. {@code info}/{@code success}/{@code failure}
+     * @param operationName the catalog operation name, used as the audit catalog name
+     * @param reason        an optional human-readable reason (e.g. exception message), may be null
+     * @param exceptionClass an optional exception class simple name, may be null
+     */
+    private void audit(String eventType, String status, String operationName, String reason, String exceptionClass) {
+        if (auditService == null || invokerId == null) {
+            return;
+        }
+        try {
+            auditService.record(invokerId, eventType, status, operationName, reason, exceptionClass, Map.of());
+        } catch (Exception e) {
+            LOGGER.warn("Audit recording failed for {}: {}", operationName, e.getMessage());
         }
     }
 

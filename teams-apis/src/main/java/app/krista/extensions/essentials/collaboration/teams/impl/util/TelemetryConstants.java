@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -40,6 +40,7 @@ public class TelemetryConstants {
     public static final String GET_CHANNEL_MESSAGES_REQUEST_SUCCESS = "teams.get_channel_messages.request.success";
     public static final String GET_CHANNEL_MESSAGES_REQUEST_FAILURE = "teams.get_channel_messages.request.failure";
 
+
     // Get Group Chat Messages metrics
     public static final String GET_GROUP_CHAT_MESSAGES_REQUEST_SUCCESS = "teams.get_group_chat_messages.request.success";
     public static final String GET_GROUP_CHAT_MESSAGES_REQUEST_FAILURE = "teams.get_group_chat_messages.request.failure";
@@ -55,6 +56,10 @@ public class TelemetryConstants {
     // Get All Group Chats metrics
     public static final String GET_ALL_GROUP_CHATS_REQUEST_SUCCESS = "teams.get_all_group_chats.request.success";
     public static final String GET_ALL_GROUP_CHATS_REQUEST_FAILURE = "teams.get_all_group_chats.request.failure";
+
+    // Get Recent Group Chats metrics
+    public static final String GET_RECENT_GROUP_CHATS_REQUEST_SUCCESS = "teams.get_recent_group_chats.request.success";
+    public static final String GET_RECENT_GROUP_CHATS_REQUEST_FAILURE = "teams.get_recent_group_chats.request.failure";
 
     // Get Channel Message Replies metrics
     public static final String GET_CHANNEL_MESSAGE_REPLIES_REQUEST_SUCCESS = "teams.get_channel_message_replies.request.success";

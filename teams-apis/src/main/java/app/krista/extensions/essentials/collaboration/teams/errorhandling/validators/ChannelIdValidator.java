@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.errorhandling.validators;
@@ -39,6 +39,9 @@ public class ChannelIdValidator extends BaseValidator {
 
     private final ChannelService channelService;
 
+    // Store the last validation exception for use in error messages
+    private ThreadLocal<Exception> lastValidationException = ThreadLocal.withInitial(() -> null);
+
     /**
      * Creates a new ChannelIdValidator.
      */
@@ -60,39 +63,30 @@ public class ChannelIdValidator extends BaseValidator {
     public Boolean validate(String resourceId, Map<ValidationResource, String> context) {
         LOGGER.debug("ChannelIdValidator.validate() called with channelID: {}", resourceId);
 
-        try {
-            // Check if Channel ID is not empty
-            if (ValidationUtils.isStringNullOrBlank(resourceId)) {
-                LOGGER.warn("Channel ID validation failed: channel ID is null or blank");
-                return false;
-            }
+        // Clear previous exception
+        lastValidationException.set(null);
 
-            // If ChannelService is available, use API validation
-            if (channelService != null) {
-                // Get Team ID from context for better validation
-                String teamId = context.get(ValidationResource.TEAM_ID);
-
-                // Validate using API call to check if channel exists and is accessible
-                boolean channelExists = channelService.validateChannelExists(resourceId.trim(),
-                        teamId != null ? teamId.trim() : null);
-
-                if (!channelExists) {
-                    LOGGER.warn("Channel ID validation failed: channel {} not found or not accessible", resourceId);
-                    return false;
-                }
-
-                LOGGER.info("Channel ID validation passed for: {}", resourceId);
-                return true;
-            } else {
-                // Fallback: basic null/blank check only (for backward compatibility)
-                LOGGER.warn("ChannelService not available, performing basic validation only for: {}", resourceId);
-                return true;
-            }
-
-        } catch (Exception e) {
-            LOGGER.error("Exception during channel ID validation for '{}': {}", resourceId, e.getMessage(), e);
-            return logExceptionAndReturnFalse(e);
+        // Check if Channel ID is not empty
+        if (ValidationUtils.isStringNullOrBlank(resourceId)) {
+            LOGGER.warn("Channel ID validation failed: channel ID is null or blank");
+            return false;
         }
+
+        // If ChannelService is available, use API validation
+        // Get Team ID from context for better validation
+        String teamId = context.get(ValidationResource.TEAM_ID);
+
+        // Validate using API call to check if channel exists and is accessible
+        boolean channelExists = channelService.validateChannelExists(resourceId.trim(),
+                teamId != null ? teamId.trim() : null);
+
+        if (!channelExists) {
+            LOGGER.warn("Channel ID validation failed: channel {} not found or not accessible", resourceId);
+            return false;
+        }
+
+        LOGGER.info("Channel ID validation passed for: {}", resourceId);
+        return true;
     }
 
     @Override
@@ -114,12 +108,51 @@ public class ChannelIdValidator extends BaseValidator {
     @Override
     public String getConfirmationStepMessage(String resourceId, Map<ValidationResource, String> context) {
         LOGGER.debug("ChannelIdValidator.getConfirmationStepMessage() - Creating message for channelID: {}", resourceId);
-        return String.format("The provided Channel ID '%s' is invalid or not accessible. Please enter a valid channel ID that exists and you have permission to access.", resourceId);
+        StringBuilder message = new StringBuilder();
+
+        // Add exception details if available
+        Exception lastException = lastValidationException.get();
+        if (lastException != null) {
+            message.append("\n\n❌ ERROR DETAILS:\n");
+            message.append("  • Exception: ").append(lastException.getClass().getSimpleName()).append("\n");
+            message.append("  • Message: ").append(lastException.getMessage());
+        } else {
+            message.append(String.format("The provided Channel ID '%s' is invalid or not accessible. Please enter a valid channel ID that exists and you have permission to access.", resourceId));
+            message.append("\n\n⚠️ TROUBLESHOOTING:\n");
+            message.append("If you believe this Channel ID is correct, please verify:\n");
+            message.append("  • You are authenticated properly with the Teams API extension\n");
+            message.append("  • Your Azure AD application has the required Microsoft Graph permissions:\n");
+            message.append("    - Channel.ReadBasic.All (for reading channel information)\n");
+            message.append("    - Team.ReadBasic.All (for accessing team channels)\n");
+            message.append("  • Admin consent has been granted for these permissions\n");
+            message.append("  • You have access to the channel in Microsoft Teams");
+        }
+        return message.toString();
     }
 
     @Override
     public String getErrMessage(String resourceId) {
         LOGGER.debug("ChannelIdValidator.getErrMessage() - Creating error message for channelID: {}", resourceId);
-        return String.format("Invalid Channel ID: %s. Please provide a valid channel ID that exists and you have access to.", resourceId);
+        StringBuilder message = new StringBuilder();
+        // Add exception details if available
+        Exception lastException = lastValidationException.get();
+        if (lastException != null) {
+            message.append("\n\n❌ ERROR DETAILS:\n");
+            message.append("  • Exception: ").append(lastException.getClass().getSimpleName()).append("\n");
+            message.append("  • Message: ").append(lastException.getMessage());
+        } else {
+            message.append(String.format("Invalid Channel ID: %s. Please provide a valid channel ID that exists and you have access to.", resourceId));
+            message.append("\n\n⚠️ TROUBLESHOOTING:\n");
+            message.append("If you believe this Channel ID is correct, please verify:\n");
+            message.append("  • You are authenticated properly with the Teams API extension\n");
+            message.append("  • Your Azure AD application has the required Microsoft Graph permissions:\n");
+            message.append("    - Channel.ReadBasic.All (for reading channel information)\n");
+            message.append("    - Team.ReadBasic.All (for accessing team channels)\n");
+            message.append("  • Admin consent has been granted for these permissions\n");
+            message.append("  • You have access to the channel in Microsoft Teams\n\n");
+            message.append("To verify your permissions, check the Azure AD application registration under 'API permissions'.");
+        }
+
+        return message.toString();
     }
 }

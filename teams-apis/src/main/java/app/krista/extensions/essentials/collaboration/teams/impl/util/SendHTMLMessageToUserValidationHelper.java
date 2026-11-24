@@ -13,7 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package app.krista.extensions.essentials.collaboration.teams.impl.util;
@@ -26,7 +26,7 @@ import app.krista.extensions.essentials.collaboration.teams.errorhandling.genera
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.managers.ErrorHandlingStateManager;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.utils.SendHTMLMessageToUserUtils;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.HTMLMessageContentValidator;
-import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.UserEmailForHTMLMessageValidator;
+import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.UserEmailValidator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.ValidationOrchestrator;
 import app.krista.extensions.essentials.collaboration.teams.errorhandling.validators.Validator;
 import org.jvnet.hk2.annotations.Service;
@@ -54,7 +54,7 @@ public class SendHTMLMessageToUserValidationHelper {
     private final ExtensionResponseGenerator responseGenerator;
     private final ErrorHandlingStateManager internalStateManager;
     private final SendHTMLMessageToUserUtils sendHTMLMessageToUserUtils;
-    private final UserEmailForHTMLMessageValidator userEmailForHTMLMessageValidator;
+    private final UserEmailValidator userEmailValidator;
     private final HTMLMessageContentValidator htmlMessageContentValidator;
 
     @Inject
@@ -62,13 +62,13 @@ public class SendHTMLMessageToUserValidationHelper {
                                                   ExtensionResponseGenerator responseGenerator,
                                                   ErrorHandlingStateManager internalStateManager,
                                                   SendHTMLMessageToUserUtils sendHTMLMessageToUserUtils,
-                                                  UserEmailForHTMLMessageValidator userEmailForHTMLMessageValidator,
+                                                  UserEmailValidator userEmailForHTMLMessageValidator,
                                                   HTMLMessageContentValidator htmlMessageContentValidator) {
         this.validationOrchestrator = validationOrchestrator;
         this.responseGenerator = responseGenerator;
         this.internalStateManager = internalStateManager;
         this.sendHTMLMessageToUserUtils = sendHTMLMessageToUserUtils;
-        this.userEmailForHTMLMessageValidator = userEmailForHTMLMessageValidator;
+        this.userEmailValidator = userEmailForHTMLMessageValidator;
         this.htmlMessageContentValidator = htmlMessageContentValidator;
 
         // Register validators
@@ -82,8 +82,8 @@ public class SendHTMLMessageToUserValidationHelper {
             LOGGER.debug("SendHTMLMessageToUserValidationHelper.registerValidators() - Starting validator registration");
 
             // Register the injected User Email validator for HTML messages
-            validationOrchestrator.registerValidator(Validator.ValidationResource.USER_EMAIL_FOR_SEND_HTML_MESSAGE, userEmailForHTMLMessageValidator);
-            LOGGER.info("Registered UserEmailForHTMLMessageValidator for USER_EMAIL_FOR_SEND_HTML_MESSAGE");
+            validationOrchestrator.registerValidator(Validator.ValidationResource.USER_EMAIL_FOR_SEND_HTML_MESSAGE, userEmailValidator);
+            LOGGER.info("Registered UserEmailValidator for USER_EMAIL_FOR_SEND_HTML_MESSAGE");
 
             // Register the injected HTML Message Content validator
             validationOrchestrator.registerValidator(Validator.ValidationResource.HTML_MESSAGE_CONTENT_FOR_SEND_MESSAGE, htmlMessageContentValidator);
